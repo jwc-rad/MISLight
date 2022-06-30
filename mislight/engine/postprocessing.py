@@ -45,7 +45,9 @@ class MyPostprocessing(object):
             resample_ = SkimageResample
         elif resample_method.lower() == 'scipy':
             resample_ = ScipyResample
-
+        else:
+            raise NotImplementedError(f'Resample method [{resample_method}] is not recognized')
+            
         fpred = np.load(os.path.join(self.datadir, f'{key}.npy'))
         
         ## if coarse_export, postprocess larget_cc only and save npy
