@@ -8,6 +8,11 @@ from torch.utils.data import Dataset, DataLoader
 from torch.utils.data.sampler import Sampler
 
 def find_dataset_using_name(dataset_name):
+    """Import the module "data/[dataset_name]_dataset.py".
+    In the file, the class called DatasetNameDataset() will
+    be instantiated. It has to be a subclass of BaseDataset,
+    and it is case-insensitive.
+    """
     dataset_filename = "mislight.data." + dataset_name + "_dataset"
     datasetlib = importlib.import_module(dataset_filename)
 
