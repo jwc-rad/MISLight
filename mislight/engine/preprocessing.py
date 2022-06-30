@@ -6,7 +6,7 @@ import random
 import SimpleITK as sitk
 from tqdm.autonotebook import tqdm
 
-from mislight.utils.image_resample import TorchResample, SkimageResample, ScipyResample
+from mislight.utils.image_resample import TorchResample
 
 class MyPreprocessing(object):    
     def __init__(self, opt):
@@ -43,10 +43,6 @@ class MyPreprocessing(object):
             self.resample = TorchResample
             assert opt.ipl_order_image in [0,1]
             assert opt.ipl_order_mask in [0,1]
-        elif opt.resample_method.lower() == 'skimage':
-            self.resample = SkimageResample
-        elif opt.resample_method.lower() == 'scipy':
-            self.resample = ScipyResample
         else:
             raise NotImplementedError(f'Resample method [{opt.resample_method}] is not recognized')
         self.ds['ipl_order_image'] = self.ipl_order_image = opt.ipl_order_image
