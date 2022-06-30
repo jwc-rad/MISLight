@@ -10,3 +10,7 @@ temp/
 preprocess/
 runs/
 results/
+
+flare_eval/inputs
+flare_eval/outputs
+flare_eval/*.log
