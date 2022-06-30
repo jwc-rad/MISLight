@@ -12,7 +12,7 @@ class PreprocessOptions(BaseOptions):
         
         parser.add_argument('--inference', action='store_true', help='images only')
         parser.add_argument('--dir_label', type=str, default='TrainMask', help='path to images under dataroot')
-        parser.add_argument('--resample_method', type=str, default='torch', help='torch or skimage or scipy')
+        parser.add_argument('--resample_method', type=str, default='torch', help='fixed to torch')
         parser.add_argument('--resample_target', type=str, default='spacing', help='spacing or size')
         parser.add_argument('--resample_fixed', type=float, nargs=3, help='if used, fixed target')
         parser.add_argument('--check_resample_target', action='store_true')
