@@ -6,7 +6,7 @@ import random
 import SimpleITK as sitk
 from tqdm.autonotebook import tqdm
 
-from mislight.utils.image_resample import TorchResample, SkimageResample, ScipyResample
+from mislight.utils.image_resample import TorchResample
 from mislight.utils.largest_cc import extract_topk_largest_candidates
 
 class MyPostprocessing(object):
@@ -41,10 +41,6 @@ class MyPostprocessing(object):
         
         if resample_method.lower() == 'torch':
             resample_ = TorchResample        
-        elif resample_method.lower() == 'skimage':
-            resample_ = SkimageResample
-        elif resample_method.lower() == 'scipy':
-            resample_ = ScipyResample
         else:
             raise NotImplementedError(f'Resample method [{resample_method}] is not recognized')
             
