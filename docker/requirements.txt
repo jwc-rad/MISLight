@@ -1,0 +1,6 @@
+pytorch-lightning
+scikit-image
+SimpleITK==2.0.2
+parmap
+connected-components-3d
+fastremap
