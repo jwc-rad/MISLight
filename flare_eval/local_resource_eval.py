@@ -1,4 +1,4 @@
-'''Evaluation script for local validation set. No need to load docker image. Call by docker_name:latest.
+'''Evaluation script for local validation set. Docker image is expected to be already loaded. Only call it by docker_name:latest.
 '''
 import argparse
 import glob
