@@ -1,4 +1,5 @@
 pytorch-lightning
+monai
 scikit-image
 SimpleITK==2.0.2
 parmap
