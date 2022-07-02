@@ -9,6 +9,7 @@ setup(name='mislight',
       install_requires=[
             "torch>1.10.0",
             "pytorch-lightning",
+            "monai",
             "scikit-image",
             "SimpleITK==2.0.2",
             "parmap",
