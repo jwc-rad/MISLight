@@ -50,4 +50,4 @@ python -m mislight.scripts.train --force_cpu_process --gpu_ids 0 --dataroot $FIN
 For inference on test set, see [test script](https://github.com/jwc-rad/MISLight/blob/flare22/docker/predict_s_s.sh) and [docker instructions](https://github.com/jwc-rad/MISLight/tree/flare22/docker).
 
 ## Acknowledgement
-- This project includes codes from the following projects: [nnUNet](https://github.com/MIC-DKFZ/nnUNet), [SSL4MIS](https://github.com/HiLab-git/SSL4MIS), [MONAI](https://github.com/Project-MONAI/MONAI), [Loss Odyssey](https://github.com/JunMa11/SegLoss)
+- This project includes codes from the following projects: [nnU-Net](https://github.com/MIC-DKFZ/nnUNet), [SSL4MIS](https://github.com/HiLab-git/SSL4MIS), [MONAI](https://github.com/Project-MONAI/MONAI), [Loss Odyssey](https://github.com/JunMa11/SegLoss)
