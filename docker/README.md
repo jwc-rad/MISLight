@@ -132,5 +132,6 @@ docker container run --name {imagename} --gpus "device=0" --rm -v {LOCAL_INPUT_D
 ```
 or for FLARE22 evaluation
 ```bash
+cd flare_eval
 nohup python local_resource_eval.py --gpu_id 0 --docker_name {imagename} >> infos.log &
 ```
