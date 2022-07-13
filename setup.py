@@ -7,7 +7,7 @@ setup(name='mislight',
       author='Jae Won Choi',
       license='MIT License',
       install_requires=[
-            "torch>1.10.0",
+            "torch>=1.10.0",
             "pytorch-lightning",
             "monai",
             "scikit-image",
