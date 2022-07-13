@@ -14,4 +14,4 @@ RUN pip install -r requirements.txt
 COPY mislight ./mislight
 COPY parameters ./parameters
 
-COPY predict.sh .
+COPY predict_s_s.sh ./predict.sh
