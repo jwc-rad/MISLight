@@ -7,7 +7,7 @@ import numpy as np
 import torch
 from torch import nn
 
-from .MONAI.dev import AttentionBlock
+from monai.networks.nets.attentionunet import AttentionBlock
 
 from .layers import Identity, ResizeConv3d, ResizeConv2d
 from .blocks import CNDA, StackedBlocks, StackedConvBlock, StackedConvResidualBlock
