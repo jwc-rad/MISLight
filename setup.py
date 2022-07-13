@@ -15,5 +15,10 @@ setup(name='mislight',
             "parmap",
             "connected-components-3d",
             "fastremap",
+            
+            # FLARE22 evaluation
+            "loguru",
+            "pynvml",
+            "psutil",
       ],
       )
