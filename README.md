@@ -46,6 +46,8 @@ python -m mislight.scripts.preprocess --gpu_ids -1 --run_base_dir $FINE_PREPROCE
 ```bash
 python -m mislight.scripts.train --force_cpu_process --gpu_ids 0 --dataroot $FINE_PREPROCESS_DIR --dataset_mode segmentation_ssl --crop_size 96 64 96 --windowHU 600 0 --batch_size 1 --model cross_teach_kd --netS mobile_se_resunet se_resunet se_resunet --n_blocks_per_stage 1 --nsf 32 32 32 --n_stages 5 --transposed_conv 1 1 0 --log_type tb --checkpoint_every_n_epochs 250 --data_augmentation v4 --inference_model 2 --exp_name fine --exp_number 1 --n_epochs 1000 --fold -1
 ```
+### Test and post-processing
+For inference on test set, see [test script](https://github.com/jwc-rad/MISLight/blob/flare22/docker/predict_s_s.sh) and [docker instructions](https://github.com/jwc-rad/MISLight/tree/flare22/docker).
 
 ## Acknowledgement
 - This project includes codes from the following projects: [nnUNet](https://github.com/MIC-DKFZ/nnUNet), [SSL4MIS](https://github.com/HiLab-git/SSL4MIS), [MONAI](https://github.com/Project-MONAI/MONAI), [Loss Odyssey](https://github.com/JunMa11/SegLoss)
