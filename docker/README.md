@@ -22,12 +22,11 @@ COPY predict_s_s.sh ./predict.sh
 ```
 
 ## Prepare
-First, copy module into <code>dockerdir</code> (directory containing Dockerfile). 
+First, copy module and other files into <code>dockerdir</code> (directory containing Dockerfile). 
 ```python
-import os
-import distutils
-
+import os, distutils, shutil
 import mislight
+
 srcdir = os.path.dirname(mislight.__file__)
 dstdir = os.path.join(dockerdir, 'mislight')
 
@@ -45,6 +44,18 @@ for x in os.walk(dstdir):
         del_dirs.append(x[0]) 
 for x in del_dirs:
     shutil.rmtree(x)
+    
+# copy other files
+srcfiles = [
+    'docker/predict_s_s.sh',
+    'docker/predict_s_t1.sh',
+    'docker/predict_onestage_s.sh',
+    'docker/predict_onestage_t1.sh',
+    'docker/requirements.txt'
+]
+for x in srcfiles:
+    shutil.copy(x, os.path.join(dockerdir, os.path.basename(x)))
+    
 ```
 
 Copy parameter files (pretrained model checkpoint and train_dataset_info json file) into <code>dockerdir</code>.
