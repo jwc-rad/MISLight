@@ -268,4 +268,4 @@ class SegmentationModel(BaseModel):
         # gaussian_importance_map cannot be 0, otherwise we may end up with nans!
         gaussian_importance_map[gaussian_importance_map == 0] = np.min(gaussian_importance_map[gaussian_importance_map != 0])
 
-        return 
+        return gaussian_importance_map
