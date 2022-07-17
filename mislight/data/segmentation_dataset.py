@@ -57,4 +57,4 @@ class SegmentationDataset(BaseDataset):
             
         return_items = self.transform({'image': X_img, 'label': Y_img})
         return_items['labeled'] = True
-        return 
+        return return_items
