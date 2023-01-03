@@ -33,8 +33,8 @@ class SegmentationBaseModel(pl.LightningModule):
         self.criterion = define_loss(opt.loss)
         
         # define metric
-        self.metrics = define_metrics(opt.metric)                                                           
-        
+        self.metrics = define_metrics(opt.metric)
+               
     ### predefined methods
     
     def configure_optimizers(self):
