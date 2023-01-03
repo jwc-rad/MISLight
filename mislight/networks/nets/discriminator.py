@@ -12,6 +12,9 @@ from mislight.utils.misc import safe_repeat
 
 class PatchGANDiscriminator(nn.Module):
     '''Re-implementation of NLayerDiscriminator from https://github.com/taesungp/contrastive-unpaired-translation
+    
+    n_layers & receptive field: 3 = 70, 4 = 142, 5 = 286
+    
     '''
     def __init__(
         self,
