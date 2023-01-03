@@ -1,3 +1,6 @@
+from .base import BaseModel
+
+
 from mislight.utils.find_class import recursive_find_python_class
 
 def create_model(opt):
