@@ -1,3 +1,7 @@
+from .gan import GANLoss
+from .patchnce import PatchNCELoss
+
+'''
 import re
 import torch
 import torch.nn as nn
@@ -17,3 +21,4 @@ def define_loss(loss_name):
     else:
         raise NotImplementedError(f'loss name [{loss_name}] is not recognized')        
     return loss
+'''
