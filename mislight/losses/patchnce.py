@@ -1,5 +1,7 @@
 '''
 Copied from: https://github.com/taesungp/contrastive-unpaired-translation/blob/master/models/patchnce.py
+Changes:
+    delete batch_size from opt
 '''
 
 from packaging import version
@@ -8,13 +10,14 @@ from torch import nn
 
 
 class PatchNCELoss(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, T=0.07, includes_all_negatives_from_minibatch=False):
         super().__init__()
-        self.opt = opt
+        self.T = T
+        self.includes_all_negatives_from_minibatch = includes_all_negatives_from_minibatch
         self.cross_entropy_loss = torch.nn.CrossEntropyLoss(reduction='none')
         self.mask_dtype = torch.uint8 if version.parse(torch.__version__) < version.parse('1.2.0') else torch.bool
 
-    def forward(self, feat_q, feat_k):
+    def forward(self, feat_q, feat_k, batch_size=1):
         num_patches = feat_q.shape[0]
         dim = feat_q.shape[1]
         feat_k = feat_k.detach()
@@ -33,12 +36,12 @@ class PatchNCELoss(nn.Module):
         # However, for single-image translation, the minibatch consists of
         # crops from the "same" high-resolution image.
         # Therefore, we will include the negatives from the entire minibatch.
-        if self.opt.nce_includes_all_negatives_from_minibatch:
+        if self.includes_all_negatives_from_minibatch:
             # reshape features as if they are all negatives of minibatch of size 1.
             batch_dim_for_bmm = 1
         else:
-            batch_dim_for_bmm = self.opt.batch_size
-
+            batch_dim_for_bmm = batch_size
+            
         # reshape features to batch size
         feat_q = feat_q.view(batch_dim_for_bmm, -1, dim)
         feat_k = feat_k.view(batch_dim_for_bmm, -1, dim)
@@ -51,7 +54,7 @@ class PatchNCELoss(nn.Module):
         l_neg_curbatch.masked_fill_(diagonal, -10.0)
         l_neg = l_neg_curbatch.view(-1, npatches)
 
-        out = torch.cat((l_pos, l_neg), dim=1) / self.opt.nce_T
+        out = torch.cat((l_pos, l_neg), dim=1) / self.nce_T
 
         loss = self.cross_entropy_loss(out, torch.zeros(out.size(0), dtype=torch.long,
                                                         device=feat_q.device))
