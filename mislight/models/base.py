@@ -1,15 +1,7 @@
 import torch
 import pytorch_lightning as pl
 
-class BaseModel(pl.LightningModule):
-    def __init__(self, opt):
-        super().__init__()
-        self.save_hyperparameters()
-        
-        # define networks
-        # define loss functions
-        # define metric
-            
+class BaseModel(pl.LightningModule):           
     def load_pretrained(self, path):
         self.load_pretrained_nets(path, nets=self.net_names)
     
