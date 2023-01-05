@@ -54,7 +54,7 @@ class PatchNCELoss(nn.Module):
         l_neg_curbatch.masked_fill_(diagonal, -10.0)
         l_neg = l_neg_curbatch.view(-1, npatches)
 
-        out = torch.cat((l_pos, l_neg), dim=1) / self.nce_T
+        out = torch.cat((l_pos, l_neg), dim=1) / self.T
 
         loss = self.cross_entropy_loss(out, torch.zeros(out.size(0), dtype=torch.long,
                                                         device=feat_q.device))
