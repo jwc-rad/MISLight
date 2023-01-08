@@ -19,6 +19,7 @@ from monai.data.meta_tensor import MetaTensor
 from monai.data.utils import get_random_patch, get_valid_patch_size
 from monai.transforms import (
     BorderPad,
+    CenterSpatialCrop,
     Compose,
     Crop,
     Cropd,
