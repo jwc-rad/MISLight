@@ -97,19 +97,28 @@ def load_pretrained_net(net, path):
     return net
 
 
-def init_weights(net, init_type='xavier'):
+def init_weights(net, init_type='xavier', init_gain=1.0):
     def init_func(m):
         classname = m.__class__.__name__
         if hasattr(m, 'weight') and (classname.find('Conv') != -1 or classname.find('Linear') != -1):
             if init_type == 'xavier':
-                init.xavier_normal_(m.weight)
+                init.xavier_normal_(m.weight.data, init_gain)
             elif init_type == 'kaiming':
-                init.kaiming_normal_(m.weight)
-            if hasattr(m, 'bias') and m.bias is not None:
+                init.kaiming_normal_(m.weight.data)
+            elif init_type == 'normal':
+                init.normal_(m.weight.data, 0, init_gain)
+            elif init_type == 'orthogonal':
+                init.orthogonal_(m.weight.data, init_gain)  
+            if getattr(m, 'bias', None) is not None:                      
                 init.constant_(m.bias.data, 0.0)
         elif classname.find('BatchNorm') != -1:
-            m.weight.data.fill_(1)
-            m.bias.data.zero_()
+            init.normal_(m.weight.data, 1.0, init_gain)
+            init.constant_(m.bias.data, 0.0)
     
     net.apply(init_func)
     return net
+
+class InitializeWeights(object):
+    def initialize_weights(self, init_type='xavier', **kwargs):
+        init_func = functools.partial(init_weights, init_type=init_type, **kwargs)
+        self.apply(init_func)            

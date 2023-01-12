@@ -9,6 +9,7 @@ import torch.nn.functional as F
 
 from mislight.networks.layers import Identity, PadConvolution
 from mislight.networks.blocks import StackedBlocks, StackedConvBlock, StackedConvResidualBlock
+from mislight.networks.utils import InitializeWeights
 from mislight.utils.misc import safe_repeat
 
 class GenericSequentialEncoder(nn.Module):
@@ -117,6 +118,7 @@ class GenericSequentialDecoder(nn.Module):
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: Optional[Union[Tuple, str, float]] = None,
+        tail_act: bool = False,
     ):    
         super().__init__()
         
@@ -147,6 +149,8 @@ class GenericSequentialDecoder(nn.Module):
         ckernel = previous_stage_kernel_sizes[0]
         cpadding_type = previous_stage_padding_types[0]
         self.tail_output = [PadConvolution(spatial_dims, features_skip, out_channels, 1, ckernel, conv_only=True, padding_type=cpadding_type)]
+        if tail_act:
+            self.tail_output += [nn.Tanh()]
         
         self.model_list = self.tus + self.tail_output
         self.model = nn.Sequential(*self.model_list)
@@ -155,7 +159,7 @@ class GenericSequentialDecoder(nn.Module):
         return self.model(x)
 
     
-class ResnetGenerator(nn.Module):
+class ResnetGenerator(nn.Module, InitializeWeights):
     '''Re-implementation of ResnetGenerator from https://github.com/taesungp/contrastive-unpaired-translation
     '''
     def __init__(
@@ -177,6 +181,8 @@ class ResnetGenerator(nn.Module):
         num_convs_per_block_encoder: Union[Sequence[int], int] = 1,
         num_convs_per_block_bottleneck: int = 2,
         max_num_features: int = 512,
+        tail_act: bool = False,
+        **initialize_weights_kwargs,
     ):                
         super().__init__()
 
@@ -185,10 +191,12 @@ class ResnetGenerator(nn.Module):
         out_channels = channels[1]
         
         encoder = GenericSequentialEncoder(spatial_dims, in_channels, base_num_features, pools, kernel_sizes, padding_type, None, norm, act, dropout, feat_map_mul_on_downscale, block_encoder, block_bottleneck, num_blocks_per_stage_encoder, num_blocks_bottleneck, num_convs_per_block_encoder, num_convs_per_block_bottleneck, max_num_features, False)
-        decoder = GenericSequentialDecoder(encoder, out_channels, norm, act, dropout)
+        decoder = GenericSequentialDecoder(encoder, out_channels, norm, act, dropout, tail_act)
 
         self.model_list = encoder.model_list + decoder.model_list
         self.model = nn.Sequential(*self.model_list)
+        
+        self.initialize_weights(**initialize_weights_kwargs)
         
     def forward(self, x, layers=[], encode_only=False):
         if -1 in layers:
