@@ -196,6 +196,9 @@ class DynUNetDecoder(nn.Module):
         return x
     
 class DynUNet(nn.Module):
+    """Adapted from monai.networks.nets.DynUNet
+    Encoder - Decoder format, no deep_supervision
+    """
     def __init__(
         self,
         spatial_dims: int, 
