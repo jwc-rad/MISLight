@@ -10,6 +10,7 @@ from monai.networks.blocks import ADN
 from monai.networks.blocks.convolutions import Convolution
 from monai.networks.layers.convutils import same_padding, stride_minus_kernel_padding
 from monai.networks.layers.factories import Conv, Pad
+from monai.utils import ensure_tuple_rep
 
 class Identity(nn.Module):
     def __init__(self, *args, **kwargs):
@@ -122,21 +123,25 @@ class PadConvolution2d(PadConvolution):
         
     
 class ResizeConv(nn.Module):
-    def __init__(self, spatial_dims, in_channels, out_channels, kernel_size, scale_factor, bias=True, padding_mode='zeros', mode='nearest', align_corners=True):
+    def __init__(self, spatial_dims, in_channels, out_channels, kernel_size, scale_factor, bias=True, padding_mode='zeros', mode='nearest', align_corners=True, resize_first=True):
         super().__init__()
-        self.scale_factor = scale_factor
-        self.mode = mode
-        self.align_corners = align_corners
+        kernel_size_ = ensure_tuple_rep(kernel_size, spatial_dims)
+        scale_factor_ = ensure_tuple_rep(scale_factor, spatial_dims)
+        self.resize_first = resize_first
+
+        self.up = nn.Upsample(scale_factor=scale_factor_, mode=mode, align_corners=align_corners)
 
         conv = Conv[Conv.CONV, spatial_dims]
-        self.conv = conv(in_channels, out_channels, kernel_size, 1, padding='same', padding_mode=padding_mode, bias=bias)
+        self.conv = conv(in_channels, out_channels, kernel_size_, 1, padding='same', padding_mode=padding_mode, bias=bias)
         
     def forward(self, x):
-        sh = np.array(x.shape[2:])
-        scale = np.array(self.scale_factor)
-        newsize = tuple(sh * scale)
-        y = nn.functional.interpolate(x, size=newsize, mode=self.mode, align_corners=self.align_corners)
-        return self.conv(y)    
+        if self.resize_first:
+            x = self.up(x)
+            x = self.conv(x)
+        else:
+            x = self.conv(x) 
+            x = self.up(x)       
+        return x
     
 class ResizeConv3d(ResizeConv):
     def __init__(self, *args, **kwargs):

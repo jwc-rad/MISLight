@@ -2,7 +2,8 @@ from typing import List, Optional, Sequence, Tuple, Type, Union
 
 import torch.nn as nn
 
-from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetOutBlock, UnetResBlock, UnetUpBlock
+from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetOutBlock, UnetResBlock #, UnetUpBlock
+from mislight.networks.blocks.dynunet_block import UnetUpBlock
 
 class DynUNetEncoder(nn.Module):
     '''
@@ -147,9 +148,14 @@ class DynUNetDecoder(nn.Module):
         kernel_size: Sequence[Union[Sequence[int], int]],
         strides: Sequence[Union[Sequence[int], int]],
         filters: Sequence[int],
+        upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]] = None,
         dropout: Optional[Union[Tuple, str, float]] = None,
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+        mode: str = "deconv",
+        interp_mode: str = "area",
+        align_corners: Optional[bool] = None,
+        resize_first: bool = True,
     ):
         super().__init__()
         self.spatial_dims = spatial_dims
@@ -157,9 +163,16 @@ class DynUNetDecoder(nn.Module):
         self.kernel_size = kernel_size
         self.strides = strides
         self.filters = filters
+        if upsample_kernel_size is None:
+            self.upsample_kernel_size = kernel_size
         self.norm_name = norm_name
         self.act_name = act_name
         self.dropout = dropout
+        self.mode = mode
+        self.interp_mode = interp_mode
+        self.align_corners = align_corners
+        self.resize_first = resize_first
+        
         self.conv_block = UnetUpBlock
 
         upsamples = []
@@ -173,10 +186,14 @@ class DynUNetDecoder(nn.Module):
                     "out_channels": out_filters[i],
                     "kernel_size": self.kernel_size[i],
                     "stride": self.strides[i],
+                    "upsample_kernel_size": self.upsample_kernel_size[i],
                     "norm_name": self.norm_name,
                     "act_name": self.act_name,
                     "dropout": self.dropout,
-                    "upsample_kernel_size": self.strides[i],
+                    "mode": self.mode,
+                    "interp_mode": self.interp_mode,
+                    "align_corners": self.align_corners,
+                    "resize_first": self.resize_first,
                 }
             upsamples.append(self.conv_block(**params))            
         self.upsamples = nn.ModuleList(upsamples)  
@@ -210,6 +227,10 @@ class DynUNet(nn.Module):
         dropout: Optional[Union[Tuple, str, float]] = None,
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+        mode: str = "deconv",
+        interp_mode: str = "area",
+        align_corners: Optional[bool] = None,
+        resize_first: bool = True,
         num_blocks: Union[Sequence[int], int] = 1,
         res_block: bool = False,
         max_filters: int = 512,
@@ -220,8 +241,8 @@ class DynUNet(nn.Module):
             dropout, norm_name, act_name, num_blocks, res_block, max_filters,
         )
         self.decoder = DynUNetDecoder(
-            spatial_dims, out_channels, kernel_size[1:][::-1], strides[1:][::-1], self.encoder.filters[::-1],
-            dropout, norm_name, act_name
+            spatial_dims, out_channels, kernel_size[1:][::-1], strides[1:][::-1], self.encoder.filters[::-1], None,
+            dropout, norm_name, act_name, mode, interp_mode, align_corners, resize_first,
         )
         
     def forward(self, x):
