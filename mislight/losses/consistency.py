@@ -1,3 +1,4 @@
+from typing import Callable, Optional, Union
 import warnings
 
 import torch
@@ -60,3 +61,100 @@ class MSEConLoss(_Loss):
             raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
             
         return F.mse_loss(input, target, reduction=self.reduction)
+    
+class DiceConLoss(_Loss):
+    """
+    Modified from monai.losses.DiceLoss.
+    input, target are both logits with shapes BNHW[D] where N is number of classes
+    """
+    def __init__(
+        self,
+        include_background: bool = True,
+        sigmoid: bool = False,
+        softmax: bool = False,
+        other_act: Optional[Callable] = None,
+        squared_pred: bool = False,
+        jaccard: bool = False,
+        reduction: str = 'mean',
+        smooth_nr: float = 1e-5,
+        smooth_dr: float = 1e-5,
+        batch: bool = False,
+    ) -> None:
+        super().__init__(reduction=reduction)
+        if other_act is not None and not callable(other_act):
+            raise TypeError(f"other_act must be None or callable but is {type(other_act).__name__}.")
+        if int(sigmoid) + int(softmax) + int(other_act is not None) > 1:
+            raise ValueError("Incompatible values: more than 1 of [sigmoid=True, softmax=True, other_act is not None].")
+        self.include_background = include_background
+        self.sigmoid = sigmoid
+        self.softmax = softmax
+        self.other_act = other_act
+        self.squared_pred = squared_pred
+        self.jaccard = jaccard
+        self.smooth_nr = float(smooth_nr)
+        self.smooth_dr = float(smooth_dr)
+        self.batch = batch
+
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        if self.sigmoid:
+            input = torch.sigmoid(input)
+            target = torch.sigmoid(target)
+
+        n_pred_ch = input.shape[1]
+        if self.softmax:
+            if n_pred_ch == 1:
+                warnings.warn("single channel prediction, `softmax=True` ignored.")
+            else:
+                input = torch.softmax(input, 1)
+                target = torch.softmax(target, 1)
+
+        if self.other_act is not None:
+            input = self.other_act(input)
+            target = self.other_act(target)
+
+        if not self.include_background:
+            if n_pred_ch == 1:
+                warnings.warn("single channel prediction, `include_background=False` ignored.")
+            else:
+                # if skipping background, removing first channel
+                target = target[:, 1:]
+                input = input[:, 1:]
+
+        if target.shape != input.shape:
+            raise AssertionError(f"ground truth has different shape ({target.shape}) from input ({input.shape})")
+
+        # reducing only spatial dimensions (not batch nor channels)
+        reduce_axis: list[int] = torch.arange(2, len(input.shape)).tolist()
+        if self.batch:
+            # reducing spatial dimensions and batch
+            reduce_axis = [0] + reduce_axis
+
+        intersection = torch.sum(target * input, dim=reduce_axis)
+
+        if self.squared_pred:
+            target = torch.pow(target, 2)
+            input = torch.pow(input, 2)
+
+        ground_o = torch.sum(target, dim=reduce_axis)
+        pred_o = torch.sum(input, dim=reduce_axis)
+
+        denominator = ground_o + pred_o
+
+        if self.jaccard:
+            denominator = 2.0 * (denominator - intersection)
+
+        f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
+
+        if self.reduction == 'mean':
+            f = torch.mean(f)  # the batch and channel average
+        elif self.reduction == 'sum':
+            f = torch.sum(f)  # sum over the batch and channel dims
+        elif self.reduction == 'none':
+            # If we are not computing voxelwise loss components at least
+            # make sure a none reduction maintains a broadcastable shape
+            broadcast_shape = list(f.shape[0:2]) + [1] * (len(input.shape) - 2)
+            f = f.view(broadcast_shape)
+        else:
+            raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
+
+        return f
