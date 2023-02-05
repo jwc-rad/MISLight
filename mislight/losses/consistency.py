@@ -6,6 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.nn.modules.loss import _Loss
 
+from monai.networks import one_hot
+from monai.utils import LossReduction
+
 class MSEConLoss(_Loss):
     """
     input, target are both logits with shapes BNHW[D] where N is number of classes
@@ -98,7 +101,7 @@ class DiceConLoss(_Loss):
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         if self.sigmoid:
             input = torch.sigmoid(input)
-            target = torch.sigmoid(target)
+            target = torch.sigmoid(target) > 0.5
 
         n_pred_ch = input.shape[1]
         if self.softmax:
@@ -106,11 +109,12 @@ class DiceConLoss(_Loss):
                 warnings.warn("single channel prediction, `softmax=True` ignored.")
             else:
                 input = torch.softmax(input, 1)
-                target = torch.softmax(target, 1)
+                target = target.argmax(1, keepdim=True)
+                target = one_hot(target, num_classes=n_pred_ch)
 
         if self.other_act is not None:
             input = self.other_act(input)
-            target = self.other_act(target)
+            target = self.other_act(target) > 0.5
 
         if not self.include_background:
             if n_pred_ch == 1:
@@ -145,11 +149,11 @@ class DiceConLoss(_Loss):
 
         f: torch.Tensor = 1.0 - (2.0 * intersection + self.smooth_nr) / (denominator + self.smooth_dr)
 
-        if self.reduction == 'mean':
+        if self.reduction == LossReduction.MEAN.value:
             f = torch.mean(f)  # the batch and channel average
-        elif self.reduction == 'sum':
+        elif self.reduction == LossReduction.SUM.value:
             f = torch.sum(f)  # sum over the batch and channel dims
-        elif self.reduction == 'none':
+        elif self.reduction == LossReduction.NONE.value:
             # If we are not computing voxelwise loss components at least
             # make sure a none reduction maintains a broadcastable shape
             broadcast_shape = list(f.shape[0:2]) + [1] * (len(input.shape) - 2)
