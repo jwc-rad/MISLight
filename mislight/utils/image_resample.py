@@ -53,7 +53,7 @@ class TorchResample(object):
     
     def resample_to_spacing(self, npy_image, source_spacing, target_spacing, device='cpu', mode=None, align_corners=None, antialias=None):
         zoom_factor = np.array(target_spacing) / np.array(source_spacing)
-        target_size = npy_image.shape / zoom_factor
+        target_size = npy_image.shape[-self.spatial_dims:] / zoom_factor
         target_size = np.rint(target_size).astype(int)
         
         target_npy_image = self.resample_to_size(npy_image, target_size, device, mode=mode, align_corners=align_corners, antialias=antialias)
@@ -117,7 +117,7 @@ class TorchResample(object):
 
     def resample_mask_to_spacing(self, npy_mask, source_spacing, target_spacing, max_label, device='cpu', argmax=False, mode=None, align_corners=None, antialias=None):  
         zoom_factor = np.array(target_spacing) / np.array(source_spacing)
-        target_size = npy_mask.shape[-3:] / zoom_factor
+        target_size = npy_mask.shape[-self.spatial_dims:] / zoom_factor
         target_size = np.rint(target_size).astype(int)
 
         target_npy_mask = self.resample_mask_to_size(npy_mask, target_size, max_label, device, argmax, mode=mode, align_corners=align_corners, antialias=antialias)
