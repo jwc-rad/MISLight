@@ -17,6 +17,7 @@ from monai.config.type_definitions import NdarrayOrTensor
 from monai.data.meta_obj import get_track_meta
 from monai.data.meta_tensor import MetaTensor
 from monai.data.utils import get_random_patch, get_valid_patch_size
+from monai.networks.utils import one_hot
 from monai.transforms import (
     BorderPad,
     CenterSpatialCrop,
@@ -95,6 +96,26 @@ from monai.utils import (
 from monai.utils.enums import GridPatchSort, TransformBackends
 from monai.utils.module import look_up_option
 from monai.utils.type_conversion import convert_data_type
+
+class OneHotLabel(Transform):
+    def __init__(self, num_classes: int, dim: int=1) -> None:
+        self.num_classes = num_classes
+        self.dim = dim
+        
+    def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
+        img = one_hot(img, num_classes=self.num_classes, dim=self.dim)
+        return img
+
+class OneHotLabeld(MapTransform):
+    def __init__(self, keys: KeysCollection, *args, **kwargs) -> None:
+        super().__init__(keys)
+        self.transform = OneHotLabel(*args, **kwargs)
+        
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Mapping[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.keys:
+            d[key] = self.transform.__call__(d[key])
+        return d 
 
 class ConvertLabel(Transform):
     def __init__(self, convert_dict: dict = {}) -> None:
