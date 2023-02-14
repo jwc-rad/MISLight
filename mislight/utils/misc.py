@@ -6,6 +6,8 @@ import os
 from PIL import Image
 import random
 import re
+import torch
+from typing import Union
 
 ###############################################################################
 # File and Folder Managers
@@ -101,7 +103,7 @@ def safe_repeat(x, n):
         assert len(x) == n
     return x
 
-def label2colormap(x):
+def label2colormap(x: Union[torch.Tensor, np.ndarray], channel_dim=None):
     palette = [
         [255,0,0],
         [0,255,0],
@@ -148,15 +150,32 @@ def label2colormap(x):
         [90, 98, 93],
     ]
     
-    if x.shape[-1]==-1:
-        newsh = x.shape[:-1] + (3,)
+    is_torch = isinstance(x, torch.Tensor)
+    if channel_dim is None:
+        imgx = x
+        if is_torch:
+            newsh = list(x.unsqueeze(1).shape)
+            channel_dim = 1
+            newsh[channel_dim] = 3
+        else:
+            newsh = list(x.shape) + [3]
+            channel_dim = len(newsh) - 1
     else:
-        newsh = x.shape + (3,)
-    
-    cmap = np.zeros(newsh, dtype='uint8')
-    N = np.max(x)
+        if channel_dim == -1:
+            channel_dim = x.shape[-1]
+        if x.shape[channel_dim] > 1:
+            imgx = x.argmax(channel_dim)
+        else:
+            imgx = x.squeeze(channel_dim)
+        newsh = list(x.shape)
+        newsh[channel_dim] = 3
+        
+    cmap = torch.zeros(newsh, dtype=torch.uint8) if is_torch else np.zeros(newsh, dtype='uint8')
+
+    N = imgx.max()
     for i in range(1,1+int(N)):
-        cmap[x==i] = palette[i-1]
+        for j in range(3):
+            cmap[(slice(None),)*channel_dim + (j,)][imgx == i] = palette[i-1][j]
     return cmap
 
 def str2bool(v):
