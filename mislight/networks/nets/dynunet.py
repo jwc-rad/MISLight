@@ -3,6 +3,7 @@ from typing import List, Optional, Sequence, Tuple, Type, Union
 import torch.nn as nn
 
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetOutBlock, UnetResBlock #, UnetUpBlock
+from monai.networks.layers.factories import Act, split_args
 from mislight.networks.blocks.dynunet_block import UnetUpBlock
 
 class DynUNetEncoder(nn.Module):
@@ -20,7 +21,7 @@ class DynUNetEncoder(nn.Module):
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         num_blocks: Union[Sequence[int], int] = 1,
-        res_block: bool = False,
+        res_block: Union[Sequence[bool], bool] = False,
         max_filters: int = 512,
     ):
         super().__init__()
@@ -31,7 +32,6 @@ class DynUNetEncoder(nn.Module):
         self.norm_name = norm_name
         self.act_name = act_name
         self.dropout = dropout
-        self.conv_block = UnetResBlock if res_block else UnetBasicBlock
         if isinstance(filters, int):
             self.filters = [min(filters * (2 ** i), max_filters) for i in range(len(strides))]
         else:
@@ -42,7 +42,11 @@ class DynUNetEncoder(nn.Module):
         else:
             self.num_blocks = num_blocks
         self.check_num_blocks()
-        
+        if isinstance(res_block, Sequence):
+            self.conv_blocks = [UnetResBlock if x else UnetBasicBlock for x in res_block]
+        else:
+            self.conv_blocks = [UnetResBlock]*len(strides) if res_block else [UnetBasicBlock]*len(strides)
+        self.check_conv_blocks()
         downsamples = []
         
         in_filters = [self.in_channels] + self.filters[:-1]
@@ -53,8 +57,9 @@ class DynUNetEncoder(nn.Module):
             k = self.kernel_size[i]
             s = self.strides[i]
             nb = self.num_blocks[i]
+            cb = self.conv_blocks[i]
             
-            downsamples.append(self.get_stacked_blocks(ic, oc, k, s, self.conv_block, nb))
+            downsamples.append(self.get_stacked_blocks(ic, oc, k, s, cb, nb))
             
         self.downsamples = nn.ModuleList(downsamples)
             
@@ -64,13 +69,18 @@ class DynUNetEncoder(nn.Module):
             raise ValueError("length of filters should be no less than the length of strides.")
         else:
             self.filters = filters[: len(self.strides)]
-            
     def check_num_blocks(self):
         num_blocks = self.num_blocks
         if len(num_blocks) < len(self.strides):
             raise ValueError("length of num_blocks should be no less than the length of strides.")
         else:
             self.num_blocks = num_blocks[: len(self.strides)]
+    def check_conv_blocks(self):
+        conv_blocks = self.conv_blocks
+        if len(conv_blocks) < len(self.strides):
+            raise ValueError("length of conv_blocks should be no less than the length of strides.")
+        else:
+            self.conv_blocks = conv_blocks[: len(self.strides)]
             
     def get_stacked_blocks(
         self,
@@ -117,9 +127,10 @@ class DynUNetEncoder(nn.Module):
     def forward(self, x, layers=[], encode_only=False):
         if not encode_only:
             skips = []
+            feat = x
             for m in self.downsamples:
-                x = m(x)
-                skips.append(x)
+                feat  = m(feat)
+                skips.append(feat)
     
         if len(layers) > 0:
             feat = x
@@ -156,6 +167,7 @@ class DynUNetDecoder(nn.Module):
         interp_mode: str = "area",
         align_corners: Optional[bool] = None,
         resize_first: bool = True,
+        head_act: Optional[Union[Tuple, str]] = None,
     ):
         super().__init__()
         self.spatial_dims = spatial_dims
@@ -199,6 +211,11 @@ class DynUNetDecoder(nn.Module):
         self.upsamples = nn.ModuleList(upsamples)  
         
         self.head = UnetOutBlock(self.spatial_dims, self.filters[-1], self.out_channels, dropout=self.dropout)
+        if head_act is None:
+            self.head_act = nn.Identity()
+        else:
+            _act, _act_args = split_args(head_act)
+            self.head_act = Act[_act](**_act_args)
         
     def forward(self, skips):
         skips = skips[::-1]
@@ -208,7 +225,7 @@ class DynUNetDecoder(nn.Module):
         for skip, up in zip(skips[1:], self.upsamples):
             x = up(x, skip)
         
-        x = self.head(x)
+        x = self.head_act(self.head(x))
         
         return x
     
@@ -234,6 +251,7 @@ class DynUNet(nn.Module):
         num_blocks: Union[Sequence[int], int] = 1,
         res_block: bool = False,
         max_filters: int = 512,
+        head_act: Optional[Union[Tuple, str]] = None,
     ):    
         super().__init__()
         self.encoder = DynUNetEncoder(
@@ -242,10 +260,13 @@ class DynUNet(nn.Module):
         )
         self.decoder = DynUNetDecoder(
             spatial_dims, out_channels, kernel_size[1:][::-1], strides[1:][::-1], self.encoder.filters[::-1], None,
-            dropout, norm_name, act_name, mode, interp_mode, align_corners, resize_first,
+            dropout, norm_name, act_name, mode, interp_mode, align_corners, resize_first, head_act,
         )
         
-    def forward(self, x):
-        skips = self.encoder(x)
-        out = self.decoder(skips)
-        return out
+    def forward(self, x, layers=[], encode_only=False):
+        if len(layers) > 0:
+            return self.encoder(x, layers, encode_only)
+        else:
+            skips = self.encoder(x)
+            out = self.decoder(skips)
+            return out
