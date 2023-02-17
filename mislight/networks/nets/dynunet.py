@@ -23,6 +23,7 @@ class DynUNetEncoder(nn.Module):
         num_blocks: Union[Sequence[int], int] = 1,
         res_block: Union[Sequence[bool], bool] = False,
         max_filters: int = 512,
+        default_return_skips: bool = True,
     ):
         super().__init__()
         self.spatial_dims = spatial_dims
@@ -32,6 +33,7 @@ class DynUNetEncoder(nn.Module):
         self.norm_name = norm_name
         self.act_name = act_name
         self.dropout = dropout
+        self.default_return_skips = default_return_skips
         if isinstance(filters, int):
             self.filters = [min(filters * (2 ** i), max_filters) for i in range(len(strides))]
         else:
@@ -124,14 +126,21 @@ class DynUNetEncoder(nn.Module):
                 layers.append(layer)
         return nn.Sequential(*layers)
     
-    def forward(self, x, layers=[], encode_only=False):
+    def forward(self, x, layers=[], encode_only=False, return_skips=None):
+        if return_skips is None:
+            return_skips = self.default_return_skips
+        
         if not encode_only:
             skips = []
             feat = x
             for m in self.downsamples:
                 feat  = m(feat)
                 skips.append(feat)
-    
+            if return_skips:
+                output = skips
+            else:
+                output = skips[-1]
+                
         if len(layers) > 0:
             feat = x
             feats = []
@@ -147,9 +156,9 @@ class DynUNetEncoder(nn.Module):
             if encode_only:
                 return feats
             else:
-                return skips, feats
+                return output, feats
         else:
-            return skips
+            return output
         
 class DynUNetDecoder(nn.Module):
     def __init__(

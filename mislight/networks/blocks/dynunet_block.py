@@ -5,9 +5,8 @@ import torch
 import torch.nn as nn
 
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, get_conv_layer
-from monai.networks.blocks.upsample import UpSample
 
-from mislight.networks.layers.convolution import ResizeConv
+from mislight.networks.blocks.convolutions import ResizeConv
 
 class UnetUpBlock(nn.Module):
     """

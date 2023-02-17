@@ -8,9 +8,9 @@ from torch import nn
 from monai.networks.layers.factories import Pool
 from monai.networks.layers.utils import get_act_layer
 
-from mislight.networks.layers import PadConvolution
+from .convolutions import Convolution
 
-class StackedConvBlock(nn.Module):
+class StackedConvBasicBlock(nn.Module):
     def __init__(
         self,
         spatial_dims: int,
@@ -19,31 +19,31 @@ class StackedConvBlock(nn.Module):
         num_convs: int = 2,
         stride: Union[Sequence[int], int] = 1,
         kernel_size: Union[Sequence[int], int] = 3,
-        padding_type: str = "zeros",
+        padding_mode: str = "zeros",
         pooling: str = None,
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: Optional[Union[Tuple, str, float]] = None,
     ):
         super().__init__()
-        conv0 = PadConvolution(
+        conv0 = Convolution(
             spatial_dims,
             in_channels,
             out_channels,
             strides=1 if pooling else stride,
             kernel_size=kernel_size,
-            padding_type=padding_type,
+            padding_mode=padding_mode,
             act=act,
             norm=norm,
             dropout=dropout,
         )
-        conv1 = PadConvolution(
+        conv1 = Convolution(
             spatial_dims,
             out_channels,
             out_channels,
             strides=1,
             kernel_size=kernel_size,
-            padding_type=padding_type,
+            padding_mode=padding_mode,
             act=act,
             norm=norm,
             dropout=dropout,
@@ -77,7 +77,7 @@ class StackedConvResidualBlock(nn.Module):
     ):
         assert num_convs > 1
         super().__init__()
-        conv0 = PadConvolution(
+        conv0 = Convolution(
             spatial_dims,
             in_channels,
             out_channels,
@@ -88,7 +88,7 @@ class StackedConvResidualBlock(nn.Module):
             norm=norm,
             dropout=dropout,
         )
-        conv1 = PadConvolution(
+        conv1 = Convolution(
             spatial_dims,
             out_channels,
             out_channels,
@@ -99,7 +99,7 @@ class StackedConvResidualBlock(nn.Module):
             norm=norm,
             dropout=dropout,
         )
-        conv2 = PadConvolution(
+        conv2 = Convolution(
             spatial_dims,
             out_channels,
             out_channels,
@@ -121,7 +121,7 @@ class StackedConvResidualBlock(nn.Module):
         self.convs = nn.Sequential(*m)
         
         if (in_channels != out_channels) or not (all(i==1 for i in stride) if hasattr(stride, '__iter__') else stride==1):
-            self.skip = PadConvolution(
+            self.skip = Convolution(
                 spatial_dims,
                 in_channels,
                 out_channels,
@@ -161,7 +161,7 @@ class StackedBlocks(nn.Module):
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: Optional[Union[Tuple, str, float]] = None,
-        block: nn.Module = StackedConvBlock,
+        block: nn.Module = StackedConvBasicBlock,
         num_blocks: int = 1,            
     ):
         super().__init__()
@@ -191,7 +191,7 @@ class ResidualStackedBlocks(nn.Module):
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: Optional[Union[Tuple, str, float]] = None,
-        block: nn.Module = StackedConvBlock,
+        block: nn.Module = StackedConvBasicBlock,
         num_blocks: int = 1,            
     ):
         assert num_blocks > 0
@@ -208,7 +208,7 @@ class ResidualStackedBlocks(nn.Module):
         self.convs = nn.Sequential(*m)
 
         if (in_channels != out_channels) or not (all(i==1 for i in stride) if hasattr(stride, '__iter__') else stride==1):
-            self.skip = PadConvolution(
+            self.skip = Convolution(
                 spatial_dims,
                 in_channels,
                 out_channels,
