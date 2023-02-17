@@ -7,7 +7,10 @@ from monai.networks.layers.factories import Act, split_args
 
 from mislight.networks.blocks.convolutions import Convolution, ResizeConv
 from mislight.networks.blocks.stack import StackedConvBasicBlock, StackedConvResidualBlock
-from .dynunet import DynUNetEncoder
+
+"""
+Reimplementation of ResnetGenerator from https://github.com/taesungp/contrastive-unpaired-translation
+"""
 
 class ResNetEncoder(nn.Module):
     def __init__(

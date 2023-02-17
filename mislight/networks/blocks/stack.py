@@ -122,7 +122,7 @@ class StackedConvResidualBlock(nn.Module):
         
         self.convs = nn.Sequential(*m)
         
-        if (in_channels != out_channels) or not (all(i==1 for i in stride) if hasattr(stride, '__iter__') else stride==1):
+        if (in_channels != out_channels) or not (all(i==1 for i in stride) if isinstance(stride, Sequence) else stride==1):
             self.skip = Convolution(
                 spatial_dims,
                 in_channels,
@@ -209,7 +209,7 @@ class ResidualStackedBlocks(nn.Module):
             m += [block2]
         self.convs = nn.Sequential(*m)
 
-        if (in_channels != out_channels) or not (all(i==1 for i in stride) if hasattr(stride, '__iter__') else stride==1):
+        if (in_channels != out_channels) or not (all(i==1 for i in stride) if isinstance(stride, Sequence) else stride==1):
             self.skip = Convolution(
                 spatial_dims,
                 in_channels,
