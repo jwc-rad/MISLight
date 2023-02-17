@@ -81,6 +81,7 @@ class Convolution(nn.Sequential):
             return
         if act is None and norm is None and dropout is None:
             return
+        
         self.add_module(
             "adn",
             ADN(

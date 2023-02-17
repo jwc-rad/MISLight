@@ -26,31 +26,33 @@ class StackedConvBasicBlock(nn.Module):
         dropout: Optional[Union[Tuple, str, float]] = None,
     ):
         super().__init__()
-        conv0 = Convolution(
-            spatial_dims,
-            in_channels,
-            out_channels,
-            strides=1 if pooling else stride,
-            kernel_size=kernel_size,
-            padding_mode=padding_mode,
-            act=act,
-            norm=norm,
-            dropout=dropout,
-        )
-        conv1 = Convolution(
-            spatial_dims,
-            out_channels,
-            out_channels,
-            strides=1,
-            kernel_size=kernel_size,
-            padding_mode=padding_mode,
-            act=act,
-            norm=norm,
-            dropout=dropout,
-        )
-
-        m = [conv0]
-        m += [conv1 for _ in range(num_convs - 1)]
+        
+        m = [
+            Convolution(
+                spatial_dims,
+                in_channels,
+                out_channels,
+                strides=1 if pooling else stride,
+                kernel_size=kernel_size,
+                padding_mode=padding_mode,
+                act=act,
+                norm=norm,
+                dropout=dropout,
+            )
+        ]
+        
+        for _ in range(num_convs - 1):
+            m.appned(Convolution(
+                spatial_dims,
+                out_channels,
+                out_channels,
+                strides=1,
+                kernel_size=kernel_size,
+                padding_mode=padding_mode,
+                act=act,
+                norm=norm,
+                dropout=dropout,                
+            ))
         
         if pooling:
             m += [Pool[pooling, spatial_dims](stride)]
@@ -69,7 +71,7 @@ class StackedConvResidualBlock(nn.Module):
         num_convs: int = 2,
         stride: Union[Sequence[int], int] = 1,
         kernel_size: Union[Sequence[int], int] = 3,
-        padding_type: str = "zeros",
+        padding_mode: str = "zeros",
         pooling: str = None,
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
@@ -77,43 +79,43 @@ class StackedConvResidualBlock(nn.Module):
     ):
         assert num_convs > 1
         super().__init__()
-        conv0 = Convolution(
+        
+        m = [Convolution(
             spatial_dims,
             in_channels,
             out_channels,
             strides=1 if pooling else stride,
             kernel_size=kernel_size,
-            padding_type=padding_type,
+            padding_mode=padding_mode,
             act=act,
             norm=norm,
-            dropout=dropout,
-        )
-        conv1 = Convolution(
+            dropout=dropout,            
+        )]
+        
+        for _ in range(num_convs - 2):
+            m.append(Convolution(
+                spatial_dims,
+                out_channels,
+                out_channels,
+                strides=1,
+                kernel_size=kernel_size,
+                padding_mode=padding_mode,
+                act=act,
+                norm=norm,
+                dropout=dropout,                
+            ))
+        
+        m.append(Convolution(
             spatial_dims,
             out_channels,
             out_channels,
             strides=1,
             kernel_size=kernel_size,
-            padding_type=padding_type,
-            act=act,
-            norm=norm,
-            dropout=dropout,
-        )
-        conv2 = Convolution(
-            spatial_dims,
-            out_channels,
-            out_channels,
-            strides=1,
-            kernel_size=kernel_size,
-            padding_type=padding_type,
+            padding_mode=padding_mode,
             act=None,
             norm=norm,
-            dropout=None,
-        )
-        
-        m = [conv0]
-        m += [conv1 for _ in range(num_convs - 2)]
-        m += [conv2]
+            dropout=None,            
+        ))
         
         if pooling:
             m += [Pool[pooling, spatial_dims](stride)]
@@ -127,7 +129,7 @@ class StackedConvResidualBlock(nn.Module):
                 out_channels,
                 strides=stride,
                 kernel_size=1,
-                padding_type=padding_type,
+                padding_mode=padding_mode,
                 act=None,
                 norm=norm,
                 dropout=None,
@@ -156,7 +158,7 @@ class StackedBlocks(nn.Module):
         num_convs: int = 2,
         stride: Union[Sequence[int], int] = 1,
         kernel_size: Union[Sequence[int], int] = 3,
-        padding_type: str = "zeros",
+        padding_mode: str = "zeros",
         pooling: str = None,
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
@@ -168,8 +170,8 @@ class StackedBlocks(nn.Module):
 
         if num_blocks > 0:
             self.convs = nn.Sequential(
-                block(spatial_dims, in_channels, out_channels, num_convs, stride, kernel_size, padding_type, pooling, norm, act, dropout),
-                *[block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_type, pooling, norm, act, dropout) for _ in range(num_blocks - 1)]
+                block(spatial_dims, in_channels, out_channels, num_convs, stride, kernel_size, padding_mode, pooling, norm, act, dropout),
+                *[block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_mode, pooling, norm, act, dropout) for _ in range(num_blocks - 1)]
             )
         else:
             self.convs = lambda x: x
@@ -186,7 +188,7 @@ class ResidualStackedBlocks(nn.Module):
         num_convs: int = 2,
         stride: Union[Sequence[int], int] = 1,
         kernel_size: Union[Sequence[int], int] = 3,
-        padding_type: str = "zeros",
+        padding_mode: str = "zeros",
         pooling: str = None,
         norm: Union[Tuple, str] = "instance",
         act: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
@@ -197,9 +199,9 @@ class ResidualStackedBlocks(nn.Module):
         assert num_blocks > 0
         super().__init__()
 
-        block0 = block(spatial_dims, in_channels, out_channels, num_convs, stride, kernel_size, padding_type, pooling, norm, act, dropout)
-        block1 = block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_type, pooling, norm, act, dropout)
-        block2 = block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_type, pooling, norm, None, None)
+        block0 = block(spatial_dims, in_channels, out_channels, num_convs, stride, kernel_size, padding_mode, pooling, norm, act, dropout)
+        block1 = block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_mode, pooling, norm, act, dropout)
+        block2 = block(spatial_dims, out_channels, out_channels, num_convs, 1, kernel_size, padding_mode, pooling, norm, None, None)
 
         m = [block0]
         if num_blocks > 1:
@@ -214,7 +216,7 @@ class ResidualStackedBlocks(nn.Module):
                 out_channels,
                 strides=stride,
                 kernel_size=1,
-                padding_type=padding_type,
+                padding_mode=padding_mode,
                 act=None,
                 norm=norm,
                 dropout=None,
