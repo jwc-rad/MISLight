@@ -5,7 +5,7 @@ import torch.nn as nn
 from monai.networks.blocks.dynunet_block import get_output_padding, get_padding
 from monai.networks.layers.factories import Act, split_args
 
-from mislight.networks.blocks.convolutions import Convolution, ResizeConv
+from mislight.networks.blocks.convolutions import Convolution, ResizeConv, SubpixelConv
 from mislight.networks.blocks.stack import StackedConvBasicBlock, StackedConvResidualBlock
 
 """
@@ -117,10 +117,8 @@ class ResNetDecoder(nn.Module):
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         padding_mode: str = "zeros",
         upsample_mode: str = "deconv",
-        interp_mode: str = "area",
-        align_corners: Optional[bool] = None,
-        resize_first: bool = True,
         head_act: Optional[Union[Tuple, str]] = None,
+        **upsample_kwargs,
     ):
         super().__init__()
         self.spatial_dims = spatial_dims
@@ -133,14 +131,14 @@ class ResNetDecoder(nn.Module):
         self.dropout = dropout
         self.padding_mode = padding_mode
         self.upsample_mode = upsample_mode
-        self.interp_mode = interp_mode
-        self.align_corners = align_corners
-        self.resize_first = resize_first
+        self.upsample_kwargs = upsample_kwargs
         
         if self.upsample_mode == 'deconv':
             self.get_conv = Convolution
         elif self.upsample_mode == 'resizeconv':
             self.get_conv = ResizeConv
+        elif self.upsample_mode == 'subpixelconv':
+            self.get_conv = SubpixelConv
         else:
             raise ValueError(f"upsample mode '{upsample_mode}' is not recognized.")
 
@@ -200,10 +198,25 @@ class ResNetDecoder(nn.Module):
                     "conv_only": False,
                     "padding": padding,
                     "padding_mode": self.padding_mode,
-                    "interp_mode": self.interp_mode,
-                    "align_corners": self.align_corners,
-                    "resize_first": self.resize_first,
                 }
+                params.update(self.upsample_kwargs)
+                model.append(self.get_conv(**params)) 
+            elif self.upsample_mode == 'subpixelconv':
+                padding = get_padding(self.kernel_size[i], 1)
+                params = {
+                    "spatial_dims": self.spatial_dims,
+                    "in_channels": in_filters[i],
+                    "out_channels": out_filters[i],
+                    "scale_factor": self.strides[i],
+                    "kernel_size": self.kernel_size[i],
+                    "act": self.act_name if i < len(self.strides) - 1 else None,
+                    "norm": self.norm_name if i < len(self.strides) - 1 else None,
+                    "dropout": self.dropout,
+                    "conv_only": False,
+                    "padding": padding,
+                    "padding_mode": self.padding_mode,
+                }
+                params.update(self.upsample_kwargs)
                 model.append(self.get_conv(**params))            
           
         if head_act is not None:
@@ -232,11 +245,9 @@ class ResNetGenerator(nn.Module):
         padding_mode: str = "zeros",
         num_blocks: int = 9,
         max_filters: int = 512,
-        upsample_mode: str = "deconv",
-        interp_mode: str = "area",
-        align_corners: Optional[bool] = None,
-        resize_first: bool = True,        
+        upsample_mode: str = "deconv",  
         head_act: Optional[Union[Tuple, str]] = None,
+        **upsample_kwargs,
     ):    
         super().__init__()
         self.encoder = ResNetEncoder(
@@ -245,7 +256,7 @@ class ResNetGenerator(nn.Module):
         )
         self.decoder = ResNetDecoder(
             spatial_dims, out_channels, kernel_size[::-1], strides[::-1], self.encoder.filters[::-1],
-            dropout, norm_name, act_name, padding_mode, upsample_mode, interp_mode, align_corners, resize_first, head_act,
+            dropout, norm_name, act_name, padding_mode, upsample_mode, head_act, **upsample_kwargs,
         )
         
     def forward(self, x, layers=[], encode_only=False):

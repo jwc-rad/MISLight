@@ -8,7 +8,7 @@ from torch import nn
 
 from monai.networks.blocks import ADN
 from monai.networks.layers.convutils import same_padding, stride_minus_kernel_padding
-from monai.networks.layers.factories import Conv, Pad
+from monai.networks.layers.factories import Conv, Pad, Pool
 from monai.utils import ensure_tuple_rep
 
 class Convolution(nn.Sequential):
@@ -97,8 +97,8 @@ class Convolution(nn.Sequential):
         
             
 class ResizeConv(nn.Sequential):
-    """
-    ResizeConv + ADN
+    """ResizeConv + ADN
+    Ref: https://distill.pub/2016/deconv-checkerboard/
     """
     def __init__(
         self,
@@ -167,72 +167,79 @@ class ResizeConv(nn.Sequential):
                 dropout_dim=dropout_dim,
             ),
         )
-    
-class PixelShuffleUpsampler(nn.Sequential):
-    '''added PixelShuffle between C-NDA of monai.networks.blocks.convolutions.Convolution
-    '''
+        
+class SubpixelConv(nn.Sequential):
+    """SubpixelConv (conv + pixelshuffle) + ADN
+    Adapted from monai.networks.blocks.SubpixelUpsample.
+    Ref: Shi et al., 2016, "Real-Time Single Image and Video Super-Resolution Using an Efficient Sub-Pixel Convolutional Neural Network."
+    """
     def __init__(
         self,
         spatial_dims: int,
         in_channels: int,
-        scale: int = 2,
+        out_channels: int,
+        scale_factor: Union[Sequence[int], int] = 2,
         kernel_size: Union[Sequence[int], int] = 3,
         adn_ordering: str = "NDA",
         act: Optional[Union[Tuple, str]] = "PRELU",
         norm: Optional[Union[Tuple, str]] = "INSTANCE",
         dropout: Optional[Union[Tuple, str, float]] = None,
         dropout_dim: Optional[int] = 1,
+        dilation: Union[Sequence[int], int] = 1,
+        groups: int = 1,
         bias: bool = True,
+        conv_only: bool = False,
         padding: Optional[Union[Sequence[int], int]] = None,
-        padding_type: str = "zeros",
+        padding_mode: str = "zeros",
+        apply_pad_pool: bool = True,
     ) -> None:
         super().__init__()
-        
-        self.dimensions = spatial_dims
+        self.spatial_dims = spatial_dims
         self.in_channels = in_channels
-        self.scale = scale
-        
+        self.out_channels = out_channels
+        self.scale_factor = scale_factor[0] if isinstance(scale_factor, Sequence) else scale_factor
         if padding is None:
-            padding = same_padding(kernel_size, 1)
-        conv_type = Conv[Conv.CONV, self.dimensions]
+            padding = same_padding(kernel_size, dilation)
             
-        if padding_type == 'reflect':
-            if self.dimensions == 1:
-                pad_type = nn.ReflectionPad1d
-            elif self.dimensions == 2:
-                pad_type = nn.ReflectionPad2d
-            else:
-                raise NotImplementedError(f'padding {padding_type} is not implemented for dims {self.dimensions}')
-        elif padding_type == 'replicate':
-            pad_type = Pad[Pad.REPLICATIONPAD, self.dimensions]
-        else:
-            pad_type = Pad[Pad.CONSTANTPAD, self.dimensions]
-            pad_type = functools.partial(pad_type, value=0)        
-        
-        pads = pad_type(padding)
+        conv_type = Conv[Conv.CONV, self.spatial_dims]
         conv = conv_type(
             in_channels,
-            in_channels * scale * scale,
+            out_channels * (self.scale_factor**self.spatial_dims),
             kernel_size=kernel_size,
-            padding=0,
+            stride=1,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
             bias=bias,
+            padding_mode=padding_mode,
         )
-        self.add_module("pad", pads)
         self.add_module("conv", conv)
-        self.add_module("pixelshuffle", nn.PixelShuffle(scale))
+        
+        pixelshuffle = nn.PixelShuffle(self.scale_factor)
+        self.add_module("pixelshuffle", pixelshuffle)
 
+        if apply_pad_pool:
+            pool_type = Pool[Pool.AVG, self.spatial_dims]
+            pad_type = Pad[Pad.CONSTANTPAD, self.spatial_dims]
+
+            pad_ = pad_type(padding=(self.scale_factor - 1, 0) * self.spatial_dims, value=0.0)
+            pool_ = pool_type(kernel_size=self.scale_factor, stride=1)
+            self.add_module("pad", pad_)
+            self.add_module("pool", pool_)
+
+        if conv_only:
+            return
         if act is None and norm is None and dropout is None:
             return
-        else:
-            self.add_module(
-                "adn",
-                ADN(
-                    ordering=adn_ordering,
-                    in_channels=in_channels,
-                    act=act,
-                    norm=norm,
-                    norm_dim=self.dimensions,
-                    dropout=dropout,
-                    dropout_dim=dropout_dim,
-                ),
-            )
+        self.add_module(
+            "adn",
+            ADN(
+                ordering=adn_ordering,
+                in_channels=out_channels,
+                act=act,
+                norm=norm,
+                norm_dim=self.spatial_dims,
+                dropout=dropout,
+                dropout_dim=dropout_dim,
+            ),
+        )

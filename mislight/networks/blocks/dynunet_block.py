@@ -6,7 +6,7 @@ import torch.nn as nn
 
 from monai.networks.blocks.dynunet_block import UnetBasicBlock, get_conv_layer
 
-from mislight.networks.blocks.convolutions import ResizeConv
+from mislight.networks.blocks.convolutions import ResizeConv, SubpixelConv
 
 class UnetUpBlock(nn.Module):
     """
@@ -28,19 +28,17 @@ class UnetUpBlock(nn.Module):
         act_name: Union[tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         dropout: Optional[Union[tuple, str, float]] = None,
         trans_bias: bool = False,
-        mode: str = "deconv",
         padding_mode: str = "zeros",
-        interp_mode: str = "area",
-        align_corners: Optional[bool] = None,
-        resize_first: bool = True,
+        upsample_mode: str = "deconv",
+        **upsample_kwargs,
     ):
         super().__init__()
-        if mode == 'deconv':
+        if upsample_mode == 'deconv':
             self.upsample = get_conv_layer(
                 spatial_dims,
                 in_channels,
                 out_channels,
-                kernel_size=stride,
+                kernel_size=upsample_kernel_size,
                 stride=stride,
                 dropout=dropout,
                 bias=trans_bias,
@@ -49,21 +47,38 @@ class UnetUpBlock(nn.Module):
                 conv_only=False,
                 is_transposed=True,
             )
-        elif mode == 'resizeconv':
+        elif upsample_mode == 'resizeconv':
             self.upsample = ResizeConv(
                 spatial_dims,
                 in_channels,
                 out_channels,
                 kernel_size=upsample_kernel_size,
                 scale_factor=stride,
+                dropout=dropout,
                 bias=trans_bias,
-                mode=interp_mode,
+                act=None,
+                norm=None,
+                conv_only=False,
                 padding_mode=padding_mode,
-                align_corners=align_corners,
-                resize_first=resize_first,
+                **upsample_kwargs
+            )
+        elif upsample_mode == 'subpixelconv':
+            self.upsample = SubpixelConv(
+                spatial_dims,
+                in_channels,
+                out_channels,
+                kernel_size=upsample_kernel_size,
+                scale_factor=stride,
+                dropout=dropout,
+                bias=trans_bias,
+                act=None,
+                norm=None,
+                conv_only=False,
+                padding_mode=padding_mode,
+                **upsample_kwargs
             )
         else:
-            raise ValueError(f"upsample mode '{mode}' is not recognized.")
+            raise ValueError(f"upsample mode '{upsample_mode}' is not recognized.")
         
         self.conv_block = UnetBasicBlock(
             spatial_dims,

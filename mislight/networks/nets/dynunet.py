@@ -34,23 +34,24 @@ class DynUNetEncoder(nn.Module):
         self.act_name = act_name
         self.dropout = dropout
         self.default_return_skips = default_return_skips
-        if isinstance(filters, int):
-            self.filters = [min(filters * (2 ** i), max_filters) for i in range(len(strides))]
-        else:
+        
+        if isinstance(filters, Sequence):
             self.filters = filters
-        self.check_filters()
-        if isinstance(num_blocks, int):
-            self.num_blocks = [num_blocks]*(len(strides))
         else:
+            self.filters = [min(filters * (2 ** i), max_filters) for i in range(len(strides))]
+        self.check_with_strides('filters')
+        if isinstance(num_blocks, Sequence):
             self.num_blocks = num_blocks
-        self.check_num_blocks()
+        else:
+            self.num_blocks = [num_blocks]*(len(strides))
+        self.check_with_strides('num_blocks')
         if isinstance(res_block, Sequence):
             self.conv_blocks = [UnetResBlock if x else UnetBasicBlock for x in res_block]
         else:
             self.conv_blocks = [UnetResBlock]*len(strides) if res_block else [UnetBasicBlock]*len(strides)
-        self.check_conv_blocks()
-        downsamples = []
+        self.check_with_strides('conv_blocks')
         
+        downsamples = []
         in_filters = [self.in_channels] + self.filters[:-1]
         out_filters = self.filters
         for i in range(len(self.strides)):
@@ -65,25 +66,13 @@ class DynUNetEncoder(nn.Module):
             
         self.downsamples = nn.ModuleList(downsamples)
             
-    def check_filters(self):
-        filters = self.filters
-        if len(filters) < len(self.strides):
-            raise ValueError("length of filters should be no less than the length of strides.")
+    def check_with_strides(self, attr):
+        x = getattr(self, attr)
+        if len(x) < len(self.strides):
+            raise ValueError(f"length of {x} should be no less than the length of strides.")
         else:
-            self.filters = filters[: len(self.strides)]
-    def check_num_blocks(self):
-        num_blocks = self.num_blocks
-        if len(num_blocks) < len(self.strides):
-            raise ValueError("length of num_blocks should be no less than the length of strides.")
-        else:
-            self.num_blocks = num_blocks[: len(self.strides)]
-    def check_conv_blocks(self):
-        conv_blocks = self.conv_blocks
-        if len(conv_blocks) < len(self.strides):
-            raise ValueError("length of conv_blocks should be no less than the length of strides.")
-        else:
-            self.conv_blocks = conv_blocks[: len(self.strides)]
-            
+            setattr(self, attr, x[:len(self.strides)])
+                        
     def get_stacked_blocks(
         self,
         in_channels: int,
@@ -172,11 +161,9 @@ class DynUNetDecoder(nn.Module):
         dropout: Optional[Union[Tuple, str, float]] = None,
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-        mode: str = "deconv",
-        interp_mode: str = "area",
-        align_corners: Optional[bool] = None,
-        resize_first: bool = True,
+        upsample_mode: str = "deconv",
         head_act: Optional[Union[Tuple, str]] = None,
+        **upsample_kwargs,
     ):
         super().__init__()
         self.spatial_dims = spatial_dims
@@ -185,14 +172,13 @@ class DynUNetDecoder(nn.Module):
         self.strides = strides
         self.filters = filters
         if upsample_kernel_size is None:
-            self.upsample_kernel_size = kernel_size
+            upsample_kernel_size = kernel_size
+        self.upsample_kernel_size = upsample_kernel_size
         self.norm_name = norm_name
         self.act_name = act_name
         self.dropout = dropout
-        self.mode = mode
-        self.interp_mode = interp_mode
-        self.align_corners = align_corners
-        self.resize_first = resize_first
+        self.upsample_mode = upsample_mode
+        self.upsample_kwargs = upsample_kwargs
         
         self.conv_block = UnetUpBlock
 
@@ -202,20 +188,18 @@ class DynUNetDecoder(nn.Module):
         out_filters = self.filters[1:] 
         for i in range(len(self.strides)):
             params = {
-                    "spatial_dims": self.spatial_dims,
-                    "in_channels": in_filters[i],
-                    "out_channels": out_filters[i],
-                    "kernel_size": self.kernel_size[i],
-                    "stride": self.strides[i],
-                    "upsample_kernel_size": self.upsample_kernel_size[i],
-                    "norm_name": self.norm_name,
-                    "act_name": self.act_name,
-                    "dropout": self.dropout,
-                    "mode": self.mode,
-                    "interp_mode": self.interp_mode,
-                    "align_corners": self.align_corners,
-                    "resize_first": self.resize_first,
-                }
+                "spatial_dims": self.spatial_dims,
+                "in_channels": in_filters[i],
+                "out_channels": out_filters[i],
+                "kernel_size": self.kernel_size[i],
+                "stride": self.strides[i],
+                "upsample_kernel_size": self.upsample_kernel_size[i],
+                "norm_name": self.norm_name,
+                "act_name": self.act_name,
+                "dropout": self.dropout,
+                "upsample_mode": self.upsample_mode,
+            }
+            params.update(self.upsample_kwargs)
             upsamples.append(self.conv_block(**params))            
         self.upsamples = nn.ModuleList(upsamples)  
         
@@ -241,6 +225,16 @@ class DynUNetDecoder(nn.Module):
 class DynUNet(nn.Module):
     """Adapted from monai.networks.nets.DynUNet
     Encoder - Decoder format, no deep_supervision
+    
+    if upsample_mode == 'deconv' (conventional UNet), args e.g.,
+        kernels = [3,3,3,3]
+        strides = [1,2,2,2]
+        upsample_kernel_size = strides[1:]
+    if upsample_mode == 'resizeconv', args e.g.,
+        kernels = [3,3,3,3]
+        strides = [1,2,2,2]
+        upsample_kernel_size = kernels[1:]
+    
     """
     def __init__(
         self,
@@ -249,27 +243,28 @@ class DynUNet(nn.Module):
         out_channels: int,
         kernel_size: Sequence[Union[Sequence[int], int]],
         strides: Sequence[Union[Sequence[int], int]],
+        upsample_kernel_size: Optional[Sequence[Union[Sequence[int], int]]] = None,
         filters: Union[Sequence[int], int] = 64,
         dropout: Optional[Union[Tuple, str, float]] = None,
         norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
-        mode: str = "deconv",
-        interp_mode: str = "area",
-        align_corners: Optional[bool] = None,
-        resize_first: bool = True,
+        upsample_mode: str = "deconv",
         num_blocks: Union[Sequence[int], int] = 1,
         res_block: bool = False,
         max_filters: int = 512,
         head_act: Optional[Union[Tuple, str]] = None,
+        **upsample_kwargs,
     ):    
         super().__init__()
         self.encoder = DynUNetEncoder(
             spatial_dims, in_channels, kernel_size, strides, filters, 
             dropout, norm_name, act_name, num_blocks, res_block, max_filters,
         )
+        if upsample_kernel_size is None:
+            upsample_kernel_size = kernel_size[1:][::-1]
         self.decoder = DynUNetDecoder(
-            spatial_dims, out_channels, kernel_size[1:][::-1], strides[1:][::-1], self.encoder.filters[::-1], None,
-            dropout, norm_name, act_name, mode, interp_mode, align_corners, resize_first, head_act,
+            spatial_dims, out_channels, kernel_size[1:][::-1], strides[1:][::-1], self.encoder.filters[::-1], upsample_kernel_size[::-1],
+            dropout, norm_name, act_name, upsample_mode, head_act, **upsample_kwargs,
         )
         
     def forward(self, x, layers=[], encode_only=False):
