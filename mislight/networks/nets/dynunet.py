@@ -250,7 +250,7 @@ class DynUNet(nn.Module):
         act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
         upsample_mode: str = "deconv",
         num_blocks: Union[Sequence[int], int] = 1,
-        res_block: bool = False,
+        res_block: Union[Sequence[bool], bool] = False,
         max_filters: int = 512,
         head_act: Optional[Union[Tuple, str]] = None,
         **upsample_kwargs,
