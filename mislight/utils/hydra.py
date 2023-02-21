@@ -1,14 +1,13 @@
 from typing import Any, Callable, Dict, List
 
-import hydra
-from omegaconf import DictConfig
+from hydra.utils import instantiate
+from omegaconf import DictConfig, OmegaConf
 
 def instantiate_list(cfg: DictConfig) -> List:
-    """Instantiates multiple targets from config."""
-    targets= []
-
-    for _, c in cfg.items():
-        if isinstance(c, DictConfig) and "_target_" in c:
-            targets.append(hydra.utils.instantiate(c))
+    """make list of instantiated objects"""
+    
+    targets = instantiate(cfg)
+    if OmegaConf.is_dict(targets):
+        targets = list(targets.values())
 
     return targets

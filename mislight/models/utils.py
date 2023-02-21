@@ -3,6 +3,10 @@ from collections import OrderedDict
 import itertools
 import json
 import numpy as np
+from typing import Any, Callable, Dict, List
+
+from hydra.utils import instantiate, get_class
+from omegaconf import DictConfig, OmegaConf
 
 import torch
 import torch.nn as nn
@@ -10,6 +14,26 @@ import torch.nn.functional as F
 from torch.optim import lr_scheduler
 import pytorch_lightning as pl
 
+def instantiate_scheduler(optimizer, cfg: DictConfig):
+    def add_optimizer(optimizer, cfg):
+        if isinstance(cfg, Dict):
+            for k, v in cfg.items():
+                cfg[k] = add_optimizer(optimizer, v)
+            if '_target_' in cfg:
+                if issubclass(get_class(cfg.get('_target_')), lr_scheduler._LRScheduler):
+                    cfg.update(dict(optimizer=optimizer))
+            return cfg
+        elif isinstance(cfg, List):
+            return [add_optimizer(optimizer, x) for x in cfg]
+        else:
+            return cfg
+    
+    _cfg = OmegaConf.to_container(cfg, resolve=True)
+    _cfg = add_optimizer(optimizer, _cfg)
+    return instantiate(_cfg)
+
+
+### deprecated
 def define_scheduler(optimizer, opt):
     """Return a learning rate scheduler
     """
@@ -35,6 +59,7 @@ def define_scheduler(optimizer, opt):
         return NotImplementedError('learning rate policy [%s] is not implemented', opt.lr_policy)
     return scheduler
 
+### deprecated
 def define_optimizer(net_params, opt):
     if opt.optimizer.lower() == 'adam':
         optimizer = torch.optim.Adam(net_params, opt.lr, betas=(0.9, 0.999), eps=1e-04)
