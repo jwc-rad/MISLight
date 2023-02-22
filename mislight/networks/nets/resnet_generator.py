@@ -230,6 +230,150 @@ class ResNetDecoder(nn.Module):
         x = self.model(x)
         return x
     
+class ResNetDecoderWithBottleneck(nn.Module):
+    """Bottleneck blocks + ResNetDecoder"""
+    def __init__(
+        self,
+        spatial_dims: int, 
+        out_channels: int,
+        kernel_size: Sequence[Union[Sequence[int], int]],
+        strides: Sequence[Union[Sequence[int], int]],
+        filters: Sequence[int],
+        dropout: Optional[Union[Tuple, str, float]] = None,
+        norm_name: Union[Tuple, str] = ("INSTANCE", {"affine": True}),
+        act_name: Union[Tuple, str] = ("leakyrelu", {"inplace": True, "negative_slope": 0.01}),
+        padding_mode: str = "zeros",
+        upsample_mode: str = "deconv",
+        head_act: Optional[Union[Tuple, str]] = None,
+        num_blocks: int = 9,
+        **upsample_kwargs,
+    ):
+        super().__init__()
+        self.spatial_dims = spatial_dims
+        self.out_channels = out_channels
+        self.kernel_size = kernel_size
+        self.strides = strides
+        self.filters = filters
+        self.norm_name = norm_name
+        self.act_name = act_name
+        self.dropout = dropout
+        self.padding_mode = padding_mode
+        self.upsample_mode = upsample_mode
+        self.upsample_kwargs = upsample_kwargs
+        self.num_blocks = num_blocks
+        
+        if self.upsample_mode == 'deconv':
+            self.get_conv = Convolution
+        elif self.upsample_mode == 'resizeconv':
+            self.get_conv = ResizeConv
+        elif self.upsample_mode == 'subpixelconv':
+            self.get_conv = SubpixelConv
+        else:
+            raise ValueError(f"upsample mode '{upsample_mode}' is not recognized.")
+
+        model = []
+        params = {
+            'spatial_dims': self.spatial_dims,
+            'in_channels': self.filters[0],
+            'out_channels': self.filters[0],
+            'num_convs': 2,
+            'stride': 1,
+            'kernel_size': self.kernel_size[0],
+            'padding_mode': self.padding_mode,
+            'norm': self.norm_name,
+            'act': self.act_name,
+            'dropout': self.dropout,
+        }
+            
+        for _ in range(self.num_blocks):
+            model += [StackedConvResidualBlock(**params)]
+                    
+        in_filters = self.filters
+        out_filters = self.filters[1:] + [self.out_channels]
+        for i in range(len(self.strides)):
+            if i == len(self.strides) - 1 and self.strides[i] == 1:
+                padding = get_padding(self.kernel_size[i], self.strides[i])              
+                params = {
+                    "spatial_dims": self.spatial_dims,
+                    "in_channels": in_filters[i],
+                    "out_channels": out_filters[i],
+                    "strides": self.strides[i],
+                    "kernel_size": self.kernel_size[i],
+                    "act": None,
+                    "norm": None,
+                    "dropout": self.dropout,
+                    "conv_only": False,
+                    "padding": padding,
+                    "padding_mode": self.padding_mode,
+                }
+                model.append(Convolution(**params))
+                continue
+            
+            if self.upsample_mode == 'deconv': 
+                padding = get_padding(self.kernel_size[i], self.strides[i])
+                output_padding = get_output_padding(self.kernel_size[i], self.strides[i], padding)               
+                params = {
+                    "spatial_dims": self.spatial_dims,
+                    "in_channels": in_filters[i],
+                    "out_channels": out_filters[i],
+                    "strides": self.strides[i],
+                    "kernel_size": self.kernel_size[i],
+                    "act": self.act_name if i < len(self.strides) - 1 else None,
+                    "norm": self.norm_name if i < len(self.strides) - 1 else None,
+                    "dropout": self.dropout,
+                    "conv_only": False,
+                    "is_transposed": True,
+                    "padding": padding,
+                    "output_padding": output_padding,
+                    "padding_mode": 'zeros',
+                }
+                model.append(self.get_conv(**params))
+            elif self.upsample_mode == 'resizeconv':
+                padding = get_padding(self.kernel_size[i], 1)
+                params = {
+                    "spatial_dims": self.spatial_dims,
+                    "in_channels": in_filters[i],
+                    "out_channels": out_filters[i],
+                    "scale_factor": self.strides[i],
+                    "kernel_size": self.kernel_size[i],
+                    "act": self.act_name if i < len(self.strides) - 1 else None,
+                    "norm": self.norm_name if i < len(self.strides) - 1 else None,
+                    "dropout": self.dropout,
+                    "conv_only": False,
+                    "padding": padding,
+                    "padding_mode": self.padding_mode,
+                }
+                params.update(self.upsample_kwargs)
+                model.append(self.get_conv(**params)) 
+            elif self.upsample_mode == 'subpixelconv':
+                padding = get_padding(self.kernel_size[i], 1)
+                params = {
+                    "spatial_dims": self.spatial_dims,
+                    "in_channels": in_filters[i],
+                    "out_channels": out_filters[i],
+                    "scale_factor": self.strides[i],
+                    "kernel_size": self.kernel_size[i],
+                    "act": self.act_name if i < len(self.strides) - 1 else None,
+                    "norm": self.norm_name if i < len(self.strides) - 1 else None,
+                    "dropout": self.dropout,
+                    "conv_only": False,
+                    "padding": padding,
+                    "padding_mode": self.padding_mode,
+                }
+                params.update(self.upsample_kwargs)
+                model.append(self.get_conv(**params))            
+          
+        if head_act is not None:
+            _act, _act_args = split_args(head_act)
+            head_act = Act[_act](**_act_args)
+            model.append(head_act)
+        
+        self.model = nn.Sequential(*model)
+        
+    def forward(self, x):
+        x = self.model(x)
+        return x
+    
 class ResNetGenerator(nn.Module):
     def __init__(
         self,
