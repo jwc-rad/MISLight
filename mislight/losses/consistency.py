@@ -1,3 +1,4 @@
+import math
 from typing import Callable, Optional, Union
 import warnings
 
@@ -162,3 +163,33 @@ class DiceConLoss(_Loss):
             raise ValueError(f'Unsupported reduction: {self.reduction}, available options are ["mean", "sum", "none"].')
 
         return f
+    
+    
+class KLDivConLoss(_Loss):
+    """
+    input, target are both logits with shapes BNHW[D] where N is number of classes
+    torch.nn.KLDivLoss expects the input tensor to be log probabilites by default
+    torch.nn.KLDivLoss is pointwise KLDiv, so it should be BATCHMEAN / (x*y*z) to match behavior of CrossEntropyLoss
+    """
+    def __init__(
+        self,
+        temperature: float = 1,
+        reduction: str = 'default',
+    ) -> None:
+        super().__init__(reduction=reduction)
+        assert temperature > 0
+        self.temperature = temperature
+            
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        input = input / self.temperature
+        target = target / self.temperature
+        
+        input = torch.log_softmax(input, 1)
+        target = torch.softmax(target, 1)
+        
+        if self.reduction == 'default':
+            size = math.prod(input.shape[2:])
+            loss = F.kl_div(input, target, reduction='batchmean') / size
+        else:
+            loss = F.kl_div(input, target, reduction=self.reduction)
+        return loss * (self.temperature ** 2)
