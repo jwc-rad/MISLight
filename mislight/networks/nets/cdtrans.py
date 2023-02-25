@@ -4,10 +4,12 @@ from typing import Optional, Sequence, Union
 
 from monai.networks.blocks.patchembedding import PatchEmbeddingBlock
 
-from mislight.networks.blocks.siam_transformer_block import SiamTransformerBlock
+from mislight.networks.blocks.cdtrans_block import CDTransformerBlock
 
-class SiamViT(nn.Module):
+class CDViT(nn.Module):
     """
+    Re-implementation of CDTrans Vision Transformer.
+    Based on "Xu et al., CDTrans: Cross-domain Transformer for Unsupervised Domain Adaptation <https://arxiv.org/abs/2109.06165> [https://github.com/CDTrans/CDTrans]".
     Adpated from monai.networks.nets.vit.ViT
     """
     def __init__(
@@ -66,7 +68,7 @@ class SiamViT(nn.Module):
             spatial_dims=spatial_dims,
         )
         self.blocks = nn.ModuleList(
-            [SiamTransformerBlock(hidden_size, mlp_dim, num_heads, dropout_rate, qkv_bias) for i in range(num_layers)]
+            [CDTransformerBlock(hidden_size, mlp_dim, num_heads, dropout_rate, qkv_bias) for i in range(num_layers)]
         )
         self.norm = nn.LayerNorm(hidden_size)
         if self.classification:
@@ -77,34 +79,41 @@ class SiamViT(nn.Module):
                 self.classification_head = nn.Linear(hidden_size, num_classes)  # type: ignore
 
     def forward(self, x, x2=None):
-        siam = (x2 is not None)
-        x = self.patch_embedding(x)
-        if siam:
-            x2 = self.patch_embedding(x2)
-        if hasattr(self, "cls_token"):
-            cls_token = self.cls_token.expand(x.shape[0], -1, -1)
-            x = torch.cat((cls_token, x), dim=1)
-            if siam:
-                cls_token = self.cls_token.expand(x2.shape[0], -1, -1)
-                x2 = torch.cat((cls_token, x2), dim=1)
-                
-        hidden_states_out = []
-        hidden_states_out2 = []
-        for blk in self.blocks:
-            if siam:
-                x, x2 = blk(x, x2)
-                hidden_states_out.append(x)
-                hidden_states_out2.append(x2)
-            else:
+        if x2 is None:
+            x = self.patch_embedding(x)
+            if hasattr(self, "cls_token"):
+                cls_token = self.cls_token.expand(x.shape[0], -1, -1)
+                x = torch.cat((cls_token, x), dim=1)
+            hidden_states_out = []
+            for blk in self.blocks:
                 x = blk(x)
                 hidden_states_out.append(x)
-        x = self.norm(x)
-        if siam:
+            x = self.norm(x)
+            if hasattr(self, "classification_head"):
+                x = self.classification_head(x[:, 0])
+            return x, hidden_states_out            
+        else:
+            x = self.patch_embedding(x)
+            x2 = self.patch_embedding(x2)
+            if hasattr(self, "cls_token"):
+                cls_token = self.cls_token.expand(x.shape[0], -1, -1)
+                x = torch.cat((cls_token, x), dim=1)
+                cls_token = self.cls_token.expand(x2.shape[0], -1, -1)
+                x2 = torch.cat((cls_token, x2), dim=1)
+            x3 = x2
+            hidden_states_out = []
+            hidden_states_out2 = []
+            hidden_states_out3 = []
+            for blk in self.blocks:
+                x, x2, x3 = blk(x, x2, x3)
+                hidden_states_out.append(x)
+                hidden_states_out2.append(x2)
+                hidden_states_out3.append(x3)
+            x = self.norm(x)
             x2 = self.norm(x2)
-        if hasattr(self, "classification_head"):
-            x = self.classification_head(x[:, 0])
-            if siam:
+            x3 = self.norm(x3)
+            if hasattr(self, "classification_head"):
+                x = self.classification_head(x[:, 0])
                 x2 = self.classification_head(x2[:, 0])
-        if siam:
-            return x, x2, hidden_states_out, hidden_states_out2
-        return x, hidden_states_out
+                x3 = self.classification_head(x3[:, 0])
+            return x, x2, x3, hidden_states_out, hidden_states_out2, hidden_states_out3
