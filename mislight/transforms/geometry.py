@@ -5,6 +5,8 @@ Fixed transform in __call__.
 Randomize only with 'randomize' method.
 """
 
+from __future__ import annotations
+
 import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
@@ -15,6 +17,9 @@ from monai.networks.layers import GaussianFilter
 from monai.transforms import (
     Flip,
     RandAffineGrid,
+    RandFlip,
+    RandRotate90,
+    Rand3DElastic,
     Resample, 
     Rotate90,
 )
@@ -41,35 +46,14 @@ from monai.utils import (
 )
 from monai.utils.enums import GridPatchSort, PytorchPadMode, TraceKeys, TransformBackends, WSIPatchKeys
 
-class FixRandRotate90(RandomizableTransform, InvertibleTransform):
+RandRange = Optional[Union[Sequence[Union[Tuple[float, float], float]], float]]
+
+
+class FixRandRotate90(RandRotate90):
     """
     With probability `prob`, input arrays are rotated by 90 degrees
     in the plane specified by `spatial_axes`.
     """
-
-    backend = Rotate90.backend
-
-    def __init__(self, prob: float = 0.1, max_k: int = 3, spatial_axes: tuple[int, int] = (0, 1)) -> None:
-        """
-        Args:
-            prob: probability of rotating.
-                (Default 0.1, with 10% probability it returns a rotated array)
-            max_k: number of rotations will be sampled from `np.random.randint(max_k) + 1`, (Default 3).
-            spatial_axes: 2 int numbers, defines the plane to rotate with 2 spatial axes.
-                Default: (0, 1), this is the first two axis in spatial dimensions.
-        """
-        RandomizableTransform.__init__(self, prob)
-        self.max_k = max_k
-        self.spatial_axes = spatial_axes
-
-        self._rand_k = 0
-
-    def randomize(self, data: Optional[Any] = None) -> None:
-        super().randomize(None)
-        if not self._do_transform:
-            return None
-        self._rand_k = self.R.randint(self.max_k) + 1
-
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
         Args:
@@ -85,15 +69,8 @@ class FixRandRotate90(RandomizableTransform, InvertibleTransform):
             maybe_rot90_info = self.pop_transform(out, check=False) if self._do_transform else {}
             self.push_transform(out, extra_info=maybe_rot90_info)
         return out
-
-    def inverse(self, data: torch.Tensor) -> torch.Tensor:
-        xform_info = self.pop_transform(data)
-        if not xform_info[TraceKeys.DO_TRANSFORM]:
-            return data
-        rotate_xform = xform_info[TraceKeys.EXTRA_INFO]
-        return Rotate90().inverse_transform(data, rotate_xform)
     
-class FixRandFlip(RandomizableTransform, InvertibleTransform):
+class FixRandFlip(RandFlip):
     """
     Randomly flips the image along axes. Preserves shape.
     See numpy.flip for additional details.
@@ -102,12 +79,6 @@ class FixRandFlip(RandomizableTransform, InvertibleTransform):
         prob: Probability of flipping.
         spatial_axis: Spatial axes along which to flip over. Default is None.
     """
-
-    backend = Flip.backend
-
-    def __init__(self, prob: float = 0.1, spatial_axis: Optional[Union[Sequence[int], int]] = None) -> None:
-        RandomizableTransform.__init__(self, prob)
-        self.flipper = Flip(spatial_axis=spatial_axis)
 
     def __call__(self, img: torch.Tensor) -> torch.Tensor:
         """
@@ -121,10 +92,66 @@ class FixRandFlip(RandomizableTransform, InvertibleTransform):
             xform_info = self.pop_transform(out, check=False) if self._do_transform else {}
             self.push_transform(out, extra_info=xform_info)
         return out
+    
+class FixRand3DElastic(Rand3DElastic):
+    """
+    Random elastic deformation and affine in 3D.
+    A tutorial is available: https://github.com/Project-MONAI/tutorials/blob/0.6.0/modules/transforms_demo_2d.ipynb.
+    """
+    def randomize(self, img: Optional[torch.Tensor] = None) -> None:
+        super(Rand3DElastic, self).randomize(None)
+        if not self._do_transform:
+            return None
+        if img is None:
+            return None
+        grid_size = fall_back_tuple(self.spatial_size, img.shape[1:])
+        self.rand_offset = self.R.uniform(-1.0, 1.0, [3] + list(grid_size)).astype(np.float32, copy=False)
+        self.magnitude = self.R.uniform(self.magnitude_range[0], self.magnitude_range[1])
+        self.sigma = self.R.uniform(self.sigma_range[0], self.sigma_range[1])
+        self.rand_affine_grid.randomize()
 
-    def inverse(self, data: torch.Tensor) -> torch.Tensor:
-        transform = self.pop_transform(data)
-        if not transform[TraceKeys.DO_TRANSFORM]:
-            return data
-        data.applied_operations.append(transform[TraceKeys.EXTRA_INFO])  # type: ignore
-        return self.flipper.inverse(data)
+    def __call__(
+        self,
+        img: torch.Tensor,
+        spatial_size: tuple[int, int, int] | int | None = None,
+        mode: str | int | None = None,
+        padding_mode: str | None = None,
+        randomize: bool = True,
+    ) -> torch.Tensor:
+        """
+        Args:
+            img: shape must be (num_channels, H, W, D),
+            spatial_size: specifying spatial 3D output image spatial size [h, w, d].
+                if `spatial_size` and `self.spatial_size` are not defined, or smaller than 1,
+                the transform will use the spatial size of `img`.
+            mode: {``"bilinear"``, ``"nearest"``} or spline interpolation order 0-5 (integers).
+                Interpolation mode to calculate output values. Defaults to ``self.mode``.
+                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+                When it's an integer, the numpy (cpu tensor)/cupy (cuda tensor) backends will be used
+                and the value represents the order of the spline interpolation.
+                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+            padding_mode: {``"zeros"``, ``"border"``, ``"reflection"``}
+                Padding mode for outside grid values. Defaults to ``self.padding_mode``.
+                See also: https://pytorch.org/docs/stable/generated/torch.nn.functional.grid_sample.html
+                When `mode` is an integer, using numpy/cupy backends, this argument accepts
+                {'reflect', 'grid-mirror', 'constant', 'grid-constant', 'nearest', 'mirror', 'grid-wrap', 'wrap'}.
+                See also: https://docs.scipy.org/doc/scipy/reference/generated/scipy.ndimage.map_coordinates.html
+        """
+        sp_size = fall_back_tuple(self.spatial_size, img.shape[1:])
+
+        _device = img.device if isinstance(img, torch.Tensor) else self.device
+        grid = create_grid(spatial_size=sp_size, device=_device, backend="torch")
+        if self._do_transform:
+            if self.rand_offset is None:
+                raise RuntimeError("rand_offset is not initialized.")
+            gaussian = GaussianFilter(3, self.sigma, 3.0).to(device=_device)
+            offset = torch.as_tensor(self.rand_offset, device=_device).unsqueeze(0)
+            grid[:3] += gaussian(offset)[0] * self.magnitude
+            grid = self.rand_affine_grid(grid=grid)
+        out: torch.Tensor = self.resampler(
+            img,
+            grid,  # type: ignore
+            mode=mode if mode is not None else self.mode,
+            padding_mode=padding_mode if padding_mode is not None else self.padding_mode,
+        )
+        return out
