@@ -3,14 +3,19 @@ from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple, Union
 
 import torch
 
+from monai.data.meta_obj import get_track_meta
 from monai.networks.layers import GaussianFilter
-from monai.transforms import Resample, RandAffineGrid
+from monai.transforms import (
+    RandAffineGrid,
+    Resample, 
+)
+from monai.transforms.inverse import InvertibleTransform
 from monai.transforms.transform import Randomizable, RandomizableTransform, Transform
 from monai.transforms.utils import create_grid
 from monai.utils import (
     GridSampleMode,
     GridSamplePadMode,
-    fall_back_tuple
+    fall_back_tuple,
 )
 
 RandRange = Optional[Union[Sequence[Union[Tuple[float, float], float]], float]]
@@ -117,3 +122,4 @@ class RandElasticGrid(RandomizableTransform):
             padding_mode=padding_mode if padding_mode is not None else self.padding_mode,
         )
         return out
+    
