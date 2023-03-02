@@ -193,3 +193,27 @@ class KLDivConLoss(_Loss):
         else:
             loss = F.kl_div(input, target, reduction=self.reduction)
         return loss * (self.temperature ** 2)
+    
+class CrossEntropyConLoss(_Loss):
+    """
+    input, target are both logits with shapes BNHW[D] where N is number of classes
+    """
+    def __init__(
+        self,
+        use_index: bool = True,
+        reduction: str = 'mean',
+    ) -> None:
+        """
+        Args:
+            use_index: if True, use class index for target (= argmax). Else, use class probabilities for target (= softmax).
+        """
+        super().__init__(reduction=reduction)
+        self.use_index = use_index
+            
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        if self.use_index:
+            target = target.argmax(1)
+        else:
+            target = torch.softmax(target, 1) 
+                    
+        return F.cross_entropy(input, target, reduction=self.reduction)
