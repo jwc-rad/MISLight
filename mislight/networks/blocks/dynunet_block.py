@@ -4,7 +4,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from monai.networks.blocks.dynunet_block import UnetBasicBlock, get_conv_layer
+from monai.networks.blocks.dynunet_block import UnetBasicBlock, UnetResBlock, get_conv_layer
 
 from mislight.networks.blocks.convolutions import ResizeConv, SubpixelConv
 
@@ -30,6 +30,7 @@ class UnetUpBlock(nn.Module):
         trans_bias: bool = False,
         padding_mode: str = "zeros",
         upsample_mode: str = "deconv",
+        res_block: bool = False,
         **upsample_kwargs,
     ):
         super().__init__()
@@ -80,16 +81,29 @@ class UnetUpBlock(nn.Module):
         else:
             raise ValueError(f"upsample mode '{upsample_mode}' is not recognized.")
         
-        self.conv_block = UnetBasicBlock(
-            spatial_dims,
-            out_channels + out_channels,
-            out_channels,
-            kernel_size=kernel_size,
-            stride=1,
-            dropout=dropout,
-            norm_name=norm_name,
-            act_name=act_name,
-        )
+        if res_block:
+            self.conv_block = UnetResBlock(
+                spatial_dims,
+                out_channels + out_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=1,
+                dropout=dropout,
+                norm_name=norm_name,
+                act_name=act_name,
+            )
+
+        else:
+            self.conv_block = UnetBasicBlock(
+                spatial_dims,
+                out_channels + out_channels,
+                out_channels,
+                kernel_size=kernel_size,
+                stride=1,
+                dropout=dropout,
+                norm_name=norm_name,
+                act_name=act_name,
+            )
 
     def forward(self, inp, skip):
         # number of channels for skip should equals to out_channels
