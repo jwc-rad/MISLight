@@ -207,13 +207,65 @@ class CrossEntropyConLoss(_Loss):
         Args:
             use_index: if True, use class index for target (= argmax). Else, use class probabilities for target (= softmax).
         """
-        super().__init__(reduction=reduction)
+        super().__init__()
         self.use_index = use_index
+        self.ce = nn.CrossEntropyLoss(reduction=reduction)
             
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         if self.use_index:
-            target = target.argmax(1)
+            target = one_hot(target.argmax(1, keepdims=True), target.shape[1])
         else:
             target = torch.softmax(target, 1) 
                     
-        return F.cross_entropy(input, target, reduction=self.reduction)
+        return self.ce(input, target)
+    
+class DiceCEConLoss(_Loss):
+    """
+    input, target are both logits with shapes BNHW[D] where N is number of classes
+    """
+    def __init__(
+        self,
+        include_background: bool = True,
+        softmax: bool = False,
+        other_act: Optional[Callable] = None,
+        squared_pred: bool = False,
+        jaccard: bool = False,
+        smooth_nr: float = 1e-5,
+        smooth_dr: float = 1e-5,
+        batch: bool = False,        
+        use_index: bool = True,
+        reduction: str = 'mean',
+        lambda_dice: float = 1.0, 
+        lambda_ce: float = 1.0,
+    ) -> None:
+        """
+        Args:
+            use_index: if True, use class index for target (= argmax). Else, use class probabilities for target (= softmax).
+        """
+        super().__init__()
+        self.dc = DiceConLoss(
+            include_background=include_background,
+            sigmoid=False,
+            softmax=softmax,
+            other_act=other_act,
+            squared_pred=squared_pred,
+            jaccard=jaccard,
+            smooth_nr=smooth_nr,
+            smooth_dr=smooth_dr,
+            batch=batch,
+            reduction=reduction,
+        )
+        self.ce = CrossEntropyConLoss(
+            use_index=use_index,
+            reduction=reduction,
+        )
+        
+        self.lambda_dice = lambda_dice
+        self.lambda_ce = lambda_ce
+            
+    def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
+        dc_loss = self.dc(input, target)
+        ce_loss = self.ce(input, target)
+        total_loss = self.lambda_dice * dc_loss + self.lambda_ce * ce_loss
+
+        return total_loss
