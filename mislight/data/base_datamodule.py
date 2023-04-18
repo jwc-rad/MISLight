@@ -39,14 +39,14 @@ class BaseDataModule(pl.LightningDataModule):
         return DL
     
     def val_dataloader(self):
-        if len(self.ds_valid) > 0:
+        if hasattr(self, 'ds_valid') and len(self.ds_valid) > 0:
             DL = instantiate(self.dataloader.valid, dataset=self.ds_valid)
             return DL
         else:
             return None
         
     def test_dataloader(self):
-        if len(self.ds_test) > 0:
+        if hasattr(self, 'ds_test') and len(self.ds_test) > 0:
             DL = instantiate(self.dataloader.test, dataset=self.ds_test)
             return DL
         else:
