@@ -10,6 +10,6 @@ setup(name='mislight',
             "torch>=1.10.0",
             "pytorch-lightning",
             "monai",
-            "SimpleITK==2.0.2",
+            "SimpleITK",
       ],
       )
