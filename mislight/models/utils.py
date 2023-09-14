@@ -20,7 +20,7 @@ def instantiate_scheduler(optimizer, cfg: DictConfig):
             for k, v in cfg.items():
                 cfg[k] = add_optimizer(optimizer, v)
             if '_target_' in cfg:
-                if issubclass(get_class(cfg.get('_target_')), lr_scheduler._LRScheduler):
+                if issubclass(get_class(cfg.get('_target_')), lr_scheduler.LRScheduler):
                     cfg.update(dict(optimizer=optimizer))
             return cfg
         elif isinstance(cfg, List):
