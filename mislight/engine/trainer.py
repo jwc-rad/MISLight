@@ -9,9 +9,9 @@ import wandb
 import torch
 from torchvision.transforms import ToPILImage, ToTensor
 from torchvision.utils import make_grid
-import pytorch_lightning as pl
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
-from pytorch_lightning.loggers import CSVLogger, TensorBoardLogger, WandbLogger
+import lightning.pytorch as pl
+from lightning.pytorch.callbacks import ModelCheckpoint, LearningRateMonitor
+from lightning.pytorch.loggers import CSVLogger, TensorBoardLogger, WandbLogger
 
 from .callbacks import ResultsCallback, BboxResultsCallback, SimpleResultsCallback, MetricsBestValidCallback
 

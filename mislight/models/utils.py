@@ -12,7 +12,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.optim import lr_scheduler
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 def instantiate_scheduler(optimizer, cfg: DictConfig):
     def add_optimizer(optimizer, cfg):

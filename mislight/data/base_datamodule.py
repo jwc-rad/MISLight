@@ -2,7 +2,7 @@ from typing import Optional
 
 from hydra.utils import instantiate
 
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 class BaseDataModule(pl.LightningDataModule):
     """

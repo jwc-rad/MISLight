@@ -1,5 +1,5 @@
 import torch
-import pytorch_lightning as pl
+import lightning.pytorch as pl
 
 class BaseModel(pl.LightningModule):           
     def load_pretrained(self, path):
