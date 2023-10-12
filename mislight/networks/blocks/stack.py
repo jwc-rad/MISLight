@@ -42,7 +42,7 @@ class StackedConvBasicBlock(nn.Module):
         ]
         
         for _ in range(num_convs - 1):
-            m.appned(Convolution(
+            m.append(Convolution(
                 spatial_dims,
                 out_channels,
                 out_channels,
