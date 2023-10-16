@@ -9,6 +9,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from __future__ import annotations
+
 import warnings
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Tuple, Union
@@ -27,24 +29,28 @@ __all__ = ["SlidingWindowInferer", "SliceInferer"]
 class SlidingWindowInferer(Inferer):
     """
     Copied from monai.inferers.utils.sliding_window_inference
-    Allow using scan_interval as arg
+    Allow using scan_interval, preprocessing as arg
     """
 
     def __init__(
         self,
-        roi_size: Union[Sequence[int], int],
+        roi_size: Sequence[int] | int,
         sw_batch_size: int = 1,
-        overlap: float = 0.25,
-        mode: Union[BlendMode, str] = BlendMode.CONSTANT,
-        sigma_scale: Union[Sequence[float], float] = 0.125,
-        padding_mode: Union[PytorchPadMode, str] = PytorchPadMode.CONSTANT,
+        overlap: Sequence[float] | float = 0.25,
+        mode: BlendMode | str = BlendMode.CONSTANT,
+        sigma_scale: Sequence[float] | float = 0.125,
+        padding_mode: PytorchPadMode | str = PytorchPadMode.CONSTANT,
         cval: float = 0.0,
-        sw_device: Union[torch.device, str, None] = None,
-        device: Union[torch.device, str, None] = None,
+        sw_device: torch.device | str | None = None,
+        device: torch.device | str | None = None,
         progress: bool = False,
         cache_roi_weight_map: bool = False,
-        cpu_thresh: Optional[int] = None,
+        cpu_thresh: int | None = None,
+        buffer_steps: int | None = None,
+        buffer_dim: int = -1,
+        with_coord: bool = False,
         scan_interval: Optional[Union[Sequence[int], int]] = None,
+        preprocessing: Optional[Callable] = None,
     ) -> None:
         super().__init__()
         self.roi_size = roi_size
@@ -58,7 +64,11 @@ class SlidingWindowInferer(Inferer):
         self.device = device
         self.progress = progress
         self.cpu_thresh = cpu_thresh
+        self.buffer_steps = buffer_steps
+        self.buffer_dim = buffer_dim
+        self.with_coord = with_coord
         self.scan_interval = scan_interval
+        self.preprocessing = preprocessing
 
         # compute_importance_map takes long time when computing on cpu. We thus
         # compute it once if it's static and then save it for future usage
@@ -74,26 +84,32 @@ class SlidingWindowInferer(Inferer):
                 warnings.warn("cache_roi_weight_map=True, but cache is not created. (dynamic roi_size?)")
         except BaseException as e:
             raise RuntimeError(
-                "Seems to be OOM. Please try smaller roi_size, or use mode='constant' instead of mode='gaussian'. "
+                f"roi size {self.roi_size}, mode={mode}, sigma_scale={sigma_scale}, device={device}\n"
+                "Seems to be OOM. Please try smaller patch size or mode='constant' instead of mode='gaussian'."
             ) from e
 
     def __call__(
         self,
         inputs: torch.Tensor,
-        network: Callable[..., Union[torch.Tensor, Sequence[torch.Tensor], Dict[Any, torch.Tensor]]],
+        network: Callable[..., torch.Tensor | Sequence[torch.Tensor] | dict[Any, torch.Tensor]],
         *args: Any,
         **kwargs: Any,
-    ) -> Union[torch.Tensor, Tuple[torch.Tensor, ...], Dict[Any, torch.Tensor]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, ...] | dict[Any, torch.Tensor]:
         """
+
         Args:
             inputs: model input data for inference.
             network: target model to execute inference.
                 supports callables such as ``lambda x: my_torch_model(x, additional_config)``
             args: optional args to be passed to ``network``.
             kwargs: optional keyword args to be passed to ``network``.
+
         """
 
-        device = self.device
+        device = kwargs.pop("device", self.device)
+        buffer_steps = kwargs.pop("buffer_steps", self.buffer_steps)
+        buffer_dim = kwargs.pop("buffer_dim", self.buffer_dim)
+
         if device is None and self.cpu_thresh is not None and inputs.shape[2:].numel() > self.cpu_thresh:
             device = "cpu"  # stitch in cpu memory if image is too large
 
@@ -112,7 +128,11 @@ class SlidingWindowInferer(Inferer):
             self.progress,
             self.roi_weight_map,
             None,
+            buffer_steps,
+            buffer_dim,
+            self.with_coord,
             self.scan_interval,
+            self.preprocessing
             *args,
             **kwargs,
         )
