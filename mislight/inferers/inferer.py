@@ -132,7 +132,7 @@ class SlidingWindowInferer(Inferer):
             buffer_dim,
             self.with_coord,
             self.scan_interval,
-            self.preprocessing
+            self.preprocessing,
             *args,
             **kwargs,
         )

@@ -260,7 +260,7 @@ def sliding_window_inference(
 
 
 def _get_scan_interval(
-    image_size: Sequence[int], roi_size: Sequence[int], num_spatial_dims: int, overlap: float, scan_interval: Optional[Union[Sequence[int], int]] = None,
+    image_size: Sequence[int], roi_size: Sequence[int], num_spatial_dims: int, overlap: Sequence[float], scan_interval: Optional[Union[Sequence[int], int]] = None,
 ) -> Tuple[int, ...]:
     """
     Compute scan interval according to the image size, roi size and overlap.
@@ -275,12 +275,12 @@ def _get_scan_interval(
 
     if scan_interval is None:
         scan_interval = []
-        for i in range(num_spatial_dims):
-            if roi_size[i] == image_size[i]:
-                scan_interval.append(int(roi_size[i]))
-            else:
-                interval = int(roi_size[i] * (1 - overlap))
-                scan_interval.append(interval if interval > 0 else 1)
+        for i, o in zip(range(num_spatial_dims), overlap):
+                if roi_size[i] == image_size[i]:
+                    scan_interval.append(int(roi_size[i]))
+                else:
+                    interval = int(roi_size[i] * (1 - o))
+                    scan_interval.append(interval if interval > 0 else 1)
     else:
         scan_interval = ensure_tuple_rep(scan_interval, num_spatial_dims)
     return tuple(scan_interval)
