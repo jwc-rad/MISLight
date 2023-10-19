@@ -155,12 +155,12 @@ def sliding_window_inference(
             if preprocessing is None:
                 win_data = torch.cat([inputs[win_slice] for win_slice in unravel_slice]).to(sw_device)
             else:
-                win_data = torch.cat([preprocessing(inputs[win_slice]) for win_slice in unravel_slice]).to(sw_device)
+                win_data = torch.cat([preprocessing(inputs[win_slice].clone().detach()) for win_slice in unravel_slice]).to(sw_device)
         else:
             if preprocessing is None:
                 win_data = inputs[unravel_slice[0]].to(sw_device)
             else:
-                win_data = preprocessing(inputs[unravel_slice[0]]).to(sw_device)
+                win_data = preprocessing(inputs[unravel_slice[0]].clone().detach()).to(sw_device)
         if with_coord:
             seg_prob_out = predictor(win_data, unravel_slice, *args, **kwargs)  # batched patch
         else:
