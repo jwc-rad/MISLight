@@ -36,7 +36,10 @@ class MSEConLoss(_Loss):
         self.sigmoid = sigmoid
         self.softmax = softmax
         assert temperature_y > 0
+        if temperature_y != 1:
+            assert (sigmoid or softmax)
         self.temperature_y = temperature_y
+        
             
     def forward(self, input: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         target = target / self.temperature_y
