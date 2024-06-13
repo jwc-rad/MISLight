@@ -117,6 +117,25 @@ class OneHotLabeld(MapTransform):
             d[key] = self.transform.__call__(d[key])
         return d 
 
+class TorchFunctionalOneHot(Transform):
+    def __init__(self, num_classes: int) -> None:
+        self.num_classes = num_classes
+        
+    def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
+        img = F.one_hot(img, num_classes=self.num_classes)
+        return img
+
+class TorchFunctionalOneHotd(MapTransform):
+    def __init__(self, keys: KeysCollection, *args, **kwargs) -> None:
+        super().__init__(keys)
+        self.transform = TorchFunctionalOneHot(*args, **kwargs)
+        
+    def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Mapping[Hashable, NdarrayOrTensor]:
+        d = dict(data)
+        for key in self.keys:
+            d[key] = self.transform.__call__(d[key])
+        return d 
+
 class ConvertLabel(Transform):
     def __init__(self, convert_dict: dict = {}) -> None:
         self.convert_dict = convert_dict
