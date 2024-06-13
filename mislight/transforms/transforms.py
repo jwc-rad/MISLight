@@ -117,18 +117,21 @@ class OneHotLabeld(MapTransform):
             d[key] = self.transform.__call__(d[key])
         return d 
 
-class TorchFunctionalOneHot(Transform):
+class SingleOneHot(Transform):
     def __init__(self, num_classes: int) -> None:
         self.num_classes = num_classes
         
     def __call__(self, img: NdarrayOrTensor) -> NdarrayOrTensor:
-        img = F.one_hot(img, num_classes=self.num_classes)
+        if isinstance(img, np.ndarray):
+            img = np.eye(self.num_classes)[img]
+        else:
+            img = F.one_hot(img, num_classes=self.num_classes)
         return img
 
-class TorchFunctionalOneHotd(MapTransform):
+class SingleOneHotd(MapTransform):
     def __init__(self, keys: KeysCollection, *args, **kwargs) -> None:
         super().__init__(keys)
-        self.transform = TorchFunctionalOneHot(*args, **kwargs)
+        self.transform = SingleOneHot(*args, **kwargs)
         
     def __call__(self, data: Mapping[Hashable, NdarrayOrTensor]) -> Mapping[Hashable, NdarrayOrTensor]:
         d = dict(data)
