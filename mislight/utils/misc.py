@@ -188,7 +188,7 @@ def str2bool(v):
     else:
         raise argparse.ArgumentTypeError('Boolean value expected.')
         
-def mydisplay(images, cols=2, figsize=7, figratio=1, showz=0.5, zmaxis=None, window=None, colorbar=False, gray=True):
+def mydisplay(images, cols=2, figsize=7, figratio=1, showz=0.5, zmaxis=None, window=None, colorbar=False, gray=True, subplot_titles=None):
     r = int(np.ceil(len(images)/cols))
     c = cols
     plt.style.use('default')
@@ -218,6 +218,9 @@ def mydisplay(images, cols=2, figsize=7, figratio=1, showz=0.5, zmaxis=None, win
             fig.colorbar(fig0, ax=axs[idx])
         if zmaxis:
             axs[idx].axis(zmaxis)
-
+        if subplot_titles:
+            if len(subplot_titles) > i:
+                axs[idx].set_title(subplot_titles[i])
+            
     plt.show()
     plt.close(fig)
