@@ -1,4 +1,4 @@
-import itertools
+import itertools, math
 import numpy as np
 from typing import Optional
 
@@ -95,6 +95,62 @@ class SamplerDataModule(pl.LightningDataModule):
             return DL
         else:
             return None
+
+
+###############################################
+## Batch sampler for Semi-supervised Learning
+###############################################
+
+class TwoStreamSampler(Sampler):
+    def __init__(self, primary_indices, secondary_indices, primary_batch_size: int = 1, secondary_batch_size: int = 1, shuffle = True, num_samples: Optional[int] = None):
+        self.primary_indices = np.array(primary_indices)
+        self.secondary_indices = np.array(secondary_indices)
+        self.primary_batch_size = primary_batch_size
+        self.secondary_batch_size = secondary_batch_size
+        self.batch_size = primary_batch_size + secondary_batch_size
+        self.shuffle = shuffle
+        self.num_samples = len(primary_indices) if num_samples is None else num_samples
+
+        assert len(self.primary_indices) >= self.primary_batch_size > 0
+        assert len(self.secondary_indices) >= self.secondary_batch_size > 0
+
+    def __iter__(self):
+        n = len(self.primary_indices)
+        seed = int(torch.empty((), dtype=torch.int64).random_().item())
+        generator = torch.Generator()
+        generator.manual_seed(seed)
+
+        def primary_iter(shuffle=True):
+            if shuffle:
+                for _ in range(self.num_samples // n):
+                    yield from self.primary_indices[torch.randperm(n, generator=generator)].tolist()
+                yield from self.primary_indices[torch.randperm(n, generator=generator)].tolist()[:self.num_samples % n]
+            else:
+                for _ in range(self.num_samples // n):
+                    yield from self.primary_indices.tolist()
+                yield from self.primary_indices.tolist()[:self.num_samples % n]
+        
+        def secondary_iter(shuffle=True):
+            def infinite_shuffles():
+                while True:
+                    if shuffle:
+                        yield self.secondary_indices[torch.randperm(len(self.secondary_indices), generator=generator)]
+                    else:
+                        yield self.secondary_indices
+            return itertools.chain.from_iterable(infinite_shuffles())
+        
+        sample = itertools.chain(*(
+            primary_batch + secondary_batch
+            for (primary_batch, secondary_batch)
+            in zip(grouper(primary_iter(self.shuffle), self.primary_batch_size),
+                   grouper(secondary_iter(self.shuffle), self.secondary_batch_size))
+        ))        
+        
+        yield from sample
+
+    def __len__(self):
+        k = math.floor(self.num_samples / float(self.primary_batch_size))
+        return k * (self.primary_batch_size + self.secondary_batch_size)
 
 
 def iterate_once(iterable, shuffle=True):
